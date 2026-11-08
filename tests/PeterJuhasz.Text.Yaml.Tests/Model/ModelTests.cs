@@ -1,7 +1,7 @@
-using PeterJuhasz.Text.Yaml.Model;
+﻿using PeterJuhasz.Text.Yaml.Model;
 using static PeterJuhasz.Text.Yaml.Tests.Yaml;
 
-namespace PeterJuhasz.Text.Yaml.Tests;
+namespace PeterJuhasz.Text.Yaml.Tests.Model;
 
 [TestClass]
 public class ModelTests

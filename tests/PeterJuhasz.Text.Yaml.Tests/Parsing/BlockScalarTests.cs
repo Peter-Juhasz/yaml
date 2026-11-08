@@ -1,6 +1,6 @@
-using static PeterJuhasz.Text.Yaml.Tests.Yaml;
+﻿using static PeterJuhasz.Text.Yaml.Tests.Yaml;
 
-namespace PeterJuhasz.Text.Yaml.Tests;
+namespace PeterJuhasz.Text.Yaml.Tests.Parsing;
 
 [TestClass]
 public class BlockScalarTests

@@ -1,7 +1,7 @@
-using PeterJuhasz.Text.Yaml.Model;
+﻿using PeterJuhasz.Text.Yaml.Model;
 using static PeterJuhasz.Text.Yaml.Tests.Yaml;
 
-namespace PeterJuhasz.Text.Yaml.Tests;
+namespace PeterJuhasz.Text.Yaml.Tests.Parsing;
 
 [TestClass]
 public class ScalarTests
@@ -109,5 +109,19 @@ public class ScalarTests
 		var scalar = Root(yaml) as ScalarNode;
 		Assert.IsNotNull(scalar);
 		Assert.AreEqual(expected, scalar.IsNull);
+	}
+
+	[TestMethod]
+	public void Conversions()
+	{
+		var mapping = (MappingNode)Root("enabled: true\ncount: 3\nratio: 0.25\nname: '42'");
+
+		Assert.IsTrue(((ScalarNode)mapping["enabled"]).TryGetBoolean(out var enabled));
+		Assert.IsTrue(enabled);
+		Assert.IsTrue(((ScalarNode)mapping["count"]).TryGetInt32(out var count));
+		Assert.AreEqual(3, count);
+		Assert.IsTrue(((ScalarNode)mapping["ratio"]).TryGetDouble(out var ratio));
+		Assert.AreEqual(0.25, ratio);
+		Assert.IsFalse(((ScalarNode)mapping["name"]).TryGetInt32(out _));
 	}
 }

@@ -1,7 +1,7 @@
 ﻿using PeterJuhasz.Text.Yaml.Model;
 using static PeterJuhasz.Text.Yaml.Tests.Yaml;
 
-namespace PeterJuhasz.Text.Yaml.Tests;
+namespace PeterJuhasz.Text.Yaml.Tests.Model;
 
 [TestClass]
 public class ConversionTests
@@ -224,19 +224,5 @@ public class ConversionTests
 		Assert.IsTrue(Plain("1.5").TryGet<float>(out var single));
 		Assert.AreEqual(1.5f, single);
 		Assert.IsFalse(Plain("abc").TryGet<Guid>(out _));
-	}
-
-	[TestMethod]
-	public void FromParsedDocument()
-	{
-		var mapping = (MappingNode)Root("enabled: true\ncount: 3\nratio: 0.25\nname: '42'");
-
-		Assert.IsTrue(((ScalarNode)mapping["enabled"]).TryGetBoolean(out var enabled));
-		Assert.IsTrue(enabled);
-		Assert.IsTrue(((ScalarNode)mapping["count"]).TryGetInt32(out var count));
-		Assert.AreEqual(3, count);
-		Assert.IsTrue(((ScalarNode)mapping["ratio"]).TryGetDouble(out var ratio));
-		Assert.AreEqual(0.25, ratio);
-		Assert.IsFalse(((ScalarNode)mapping["name"]).TryGetInt32(out _));
 	}
 }

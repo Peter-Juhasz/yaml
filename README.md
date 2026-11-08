@@ -69,3 +69,34 @@ if (scalar.TryGetInt32(out var count)) { ... }
 | `TryGetDecimal` | integers, `1.5`, `.5`, `1e3` |
 
 Only plain scalars are converted: quoted and block scalars like `'42'` are always strings. Values out of range of the target type return `false`.
+
+## Serialization
+
+To deserialize a document into a mutable .NET object, which has a public parameterless constructor and settable properties:
+
+```cs
+var configuration = YamlSerializer.Deserialize<Configuration>(yaml);
+```
+
+An already parsed `DocumentNode` or any `Node` can be deserialized as well. Options:
+
+```cs
+var options = new YamlSerializerOptions
+{
+	PropertyNamingPolicy = YamlNamingPolicy.SnakeCaseLower, // CamelCase, SnakeCaseLower/Upper, KebabCaseLower/Upper
+	PropertyNameCaseInsensitive = true,
+	EnumNamingPolicy = YamlNamingPolicy.SnakeCaseLower,
+};
+```
+
+Supported types:
+- `string`, `char`, `bool`, all integer types (including `Int128`, `UInt128`, `BigInteger`), `Half`, `float`, `double`, `decimal`
+- `DateTime`, `DateTimeOffset` (UTC when no offset is given), `DateOnly`, `TimeOnly`, `TimeSpan` (`1.02:03:04` or ISO 8601 `P1DT2H3M4S`), `Uri`, `Guid`, `Version`, and any other `IParsable<T>`
+- enums, from integers (`2`) or member names (`Information`, case insensitive), comma separated for flags (`Read, Write`)
+- `Nullable<T>`, arrays, `List<T>`, `HashSet<T>`, `Dictionary<TKey, TValue>`, their interfaces, and any collection with a parameterless constructor
+- `byte[]` from a base64 encoded scalar
+- `Node` and `object` properties receive the object model as is
+
+Properties can be renamed with `[YamlPropertyName("key")]` and skipped with `[YamlIgnore]`. Unknown keys are ignored, missing `required` properties raise an error. Booleans and numbers follow the core schema just like the conversion methods above, so `'42'` is not an integer. Errors raise a `YamlSerializationException` with the `Path` of the node, like `$.servers[1].port`.
+
+Deserialization uses reflection, so it is annotated as not trimming and AOT compatible.

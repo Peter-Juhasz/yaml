@@ -1,6 +1,6 @@
-using PeterJuhasz.Text.Yaml.Parsing;
+﻿using PeterJuhasz.Text.Yaml.Parsing;
 
-namespace PeterJuhasz.Text.Yaml.Tests;
+namespace PeterJuhasz.Text.Yaml.Tests.Parsing;
 
 [TestClass]
 public class ErrorTests
