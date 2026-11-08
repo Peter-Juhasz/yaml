@@ -102,7 +102,7 @@ var options = new YamlSerializerOptions
 Supported types:
 - `string`, `char`, `bool`, all integer types (including `Int128`, `UInt128`, `BigInteger`), `Half`, `float`, `double`, `decimal`
 - `DateTime`, `DateTimeOffset` (UTC when no offset is given), `DateOnly`, `TimeOnly`, `TimeSpan` (`1.02:03:04` or ISO 8601 `P1DT2H3M4S`), `Uri`, `Guid`, `Version`, and any other `IParsable<T>`
-- enums, from integers (`2`) or member names (`Information`, case insensitive), comma separated for flags (`Read, Write`)
+- enums, from integers (`2`) or member names (`Information`, case insensitive), comma separated for flags (`Read, Write`); `[EnumMember(Value = "in-progress")]` replaces the name of a member
 - `Nullable<T>`, arrays, `List<T>`, `HashSet<T>`, `Dictionary<TKey, TValue>`, their interfaces, and any collection with a parameterless constructor
 - `byte[]` from a base64 encoded scalar
 - `Node` and `object` properties receive the object model as is

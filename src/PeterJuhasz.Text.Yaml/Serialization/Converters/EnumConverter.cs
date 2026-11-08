@@ -2,11 +2,12 @@ using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Reflection;
+using System.Runtime.Serialization;
 using PeterJuhasz.Text.Yaml.Model;
 
 namespace PeterJuhasz.Text.Yaml.Serialization.Converters;
 
-// reads enums from integers, or from member names, which are comma separated for flags
+// reads enums from integers, or from member names or their enum member values, which are comma separated for flags
 [RequiresUnreferencedCode(YamlSerializer.UnreferencedCodeMessage)]
 [RequiresDynamicCode(YamlSerializer.DynamicCodeMessage)]
 internal sealed class EnumConverter : YamlConverter
@@ -17,8 +18,26 @@ internal sealed class EnumConverter : YamlConverter
 	public EnumConverter(Type type, YamlNamingPolicy? namingPolicy) : base(type)
 	{
 		var names = new Dictionary<string, ulong>(StringComparer.OrdinalIgnoreCase);
-		foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Static))
+		var fields = type.GetFields(BindingFlags.Public | BindingFlags.Static);
+
+		// an explicit value replaces the name of the member, and is added first, so it wins over the names of other members
+		var renamed = new HashSet<FieldInfo>();
+		foreach (var field in fields)
 		{
+			if (field.GetCustomAttribute<EnumMemberAttribute>() is { Value: { } explicitName })
+			{
+				names.TryAdd(explicitName, ToUInt64(field.GetValue(null)!));
+				renamed.Add(field);
+			}
+		}
+
+		foreach (var field in fields)
+		{
+			if (renamed.Contains(field))
+			{
+				continue;
+			}
+
 			var value = ToUInt64(field.GetValue(null)!);
 			names.TryAdd(field.Name, value);
 			if (namingPolicy is not null)

@@ -1,4 +1,5 @@
-﻿using PeterJuhasz.Text.Yaml.Serialization;
+﻿using System.Runtime.Serialization;
+using PeterJuhasz.Text.Yaml.Serialization;
 
 namespace PeterJuhasz.Text.Yaml.Tests.Serialization;
 
@@ -20,6 +21,64 @@ public class EnumTests
 		Read = 1,
 		Write = 2,
 		Execute = 4,
+	}
+
+	public enum Status
+	{
+		[EnumMember(Value = "in-progress")]
+		InProgress,
+
+		[EnumMember(Value = "done")]
+		Completed,
+
+		// the explicit value of another member wins over this name
+		Done,
+
+		[EnumMember]
+		Cancelled,
+	}
+
+	[Flags]
+	public enum Access
+	{
+		[EnumMember(Value = "r")]
+		Read = 1,
+
+		[EnumMember(Value = "w")]
+		Write = 2,
+	}
+
+	[TestMethod]
+	[DataRow("in-progress", Status.InProgress)]
+	[DataRow("IN-PROGRESS", Status.InProgress)]
+	[DataRow("done", Status.Completed)]
+	[DataRow("Cancelled", Status.Cancelled)]
+	[DataRow("0", Status.InProgress)]
+	public void EnumMember(string yaml, Status expected)
+	{
+		Assert.AreEqual(expected, YamlSerializer.Deserialize<Status>(yaml));
+	}
+
+	[TestMethod]
+	[DataRow("InProgress")]
+	[DataRow("Completed")]
+	public void EnumMemberReplacesName(string yaml)
+	{
+		Assert.ThrowsExactly<YamlSerializationException>(() => YamlSerializer.Deserialize<Status>(yaml));
+	}
+
+	[TestMethod]
+	public void EnumMemberNotConvertedByNamingPolicy()
+	{
+		var options = new YamlSerializerOptions { EnumNamingPolicy = YamlNamingPolicy.SnakeCaseLower };
+		Assert.AreEqual(Status.InProgress, YamlSerializer.Deserialize<Status>("in-progress", options));
+		Assert.ThrowsExactly<YamlSerializationException>(() => YamlSerializer.Deserialize<Status>("in_progress", options));
+	}
+
+	[TestMethod]
+	public void EnumMemberFlags()
+	{
+		Assert.AreEqual(Access.Read | Access.Write, YamlSerializer.Deserialize<Access>("r, w"));
 	}
 
 	[TestMethod]
