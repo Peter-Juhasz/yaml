@@ -22,7 +22,9 @@ internal sealed class PolymorphicConverter(Type type, string discriminatorName, 
 		var discriminatorName = polymorphic.TypeDiscriminatorPropertyName;
 
 		// derived types get their own converters, which skip the discriminator key, the cached ones of the options stay strict
-		var derivedTypes = new Dictionary<string, YamlConverter>(StringComparer.Ordinal);
+		// discriminators differing only in case conflict, when they are matched case insensitively
+		var valueComparer = polymorphic.TypeDiscriminatorCaseInsensitive ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+		var derivedTypes = new Dictionary<string, YamlConverter>(valueComparer);
 		var seen = new HashSet<Type>();
 		foreach (var attribute in derivedAttributes)
 		{
@@ -51,7 +53,7 @@ internal sealed class PolymorphicConverter(Type type, string discriminatorName, 
 		}
 
 		var comparer = options.PropertyNameCaseInsensitive ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-		return new(type, discriminatorName, comparer, derivedTypes.ToFrozenDictionary(StringComparer.Ordinal), fallback, fallBackOnUnknown);
+		return new(type, discriminatorName, comparer, derivedTypes.ToFrozenDictionary(valueComparer), fallback, fallBackOnUnknown);
 	}
 
 	private static YamlConverter CreateObject(Type type, YamlSerializerOptions options, string discriminatorName) => CreateCore(type, options, discriminatorName) switch

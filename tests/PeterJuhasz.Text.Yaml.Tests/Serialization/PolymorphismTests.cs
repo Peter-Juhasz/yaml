@@ -69,6 +69,21 @@ public class PolymorphismTests
 	[YamlDerivedType(typeof(Cat), "cat")]
 	public abstract class AbstractFallback : Animal;
 
+	[YamlPolymorphic(TypeDiscriminatorCaseInsensitive = true)]
+	[YamlDerivedType(typeof(Parrot), "parrot")]
+	public abstract class Pet;
+
+	public sealed class Parrot : Pet;
+
+	[YamlPolymorphic(TypeDiscriminatorCaseInsensitive = true)]
+	[YamlDerivedType(typeof(Lizard), "lizard")]
+	[YamlDerivedType(typeof(Snake), "LIZARD")]
+	public abstract class Reptile;
+
+	public sealed class Lizard : Reptile;
+
+	public sealed class Snake : Reptile;
+
 	[TestMethod]
 	public void AbstractBase()
 	{
@@ -124,6 +139,23 @@ public class PolymorphismTests
 	public void DiscriminatorsAreCaseSensitive()
 	{
 		Assert.ThrowsExactly<YamlSerializationException>(static () => YamlSerializer.Deserialize<Animal>("$type: Cat"));
+	}
+
+	[TestMethod]
+	[DataRow("parrot")]
+	[DataRow("Parrot")]
+	[DataRow("PARROT")]
+	public void CaseInsensitiveDiscriminators(string discriminator)
+	{
+		Assert.IsInstanceOfType<Parrot>(YamlSerializer.Deserialize<Pet>($"$type: {discriminator}"));
+	}
+
+	[TestMethod]
+	public void DiscriminatorsDifferingInCaseConflictWhenCaseInsensitive()
+	{
+		var exception = Assert.ThrowsExactly<InvalidOperationException>(static () => YamlSerializer.Deserialize<Reptile>("$type: lizard"));
+
+		Assert.AreEqual($"The type discriminator 'LIZARD' is used by multiple derived types of the polymorphic type '{typeof(Reptile)}'.", exception.Message);
 	}
 
 	[TestMethod]
