@@ -96,6 +96,7 @@ var options = new YamlSerializerOptions
 	PropertyNamingPolicy = YamlNamingPolicy.SnakeCaseLower, // CamelCase, SnakeCaseLower/Upper, KebabCaseLower/Upper
 	PropertyNameCaseInsensitive = true,
 	EnumNamingPolicy = YamlNamingPolicy.SnakeCaseLower,
+	UnmappedMemberHandling = YamlUnmappedMemberHandling.Disallow, // throw for keys, which do not map to any member
 };
 ```
 
@@ -107,6 +108,6 @@ Supported types:
 - `byte[]` from a base64 encoded scalar
 - `Node` and `object` properties receive the object model as is
 
-Properties can be renamed with `[YamlPropertyName("key")]` and skipped with `[YamlIgnore]`. Unknown keys are ignored, missing `required` properties raise an error. Booleans and numbers follow the core schema just like the conversion methods above, so `'42'` is not an integer. Errors raise a `YamlSerializationException` with the `Path` of the node, like `$.servers[1].port`.
+Properties can be renamed with `[YamlPropertyName("key")]` and skipped with `[YamlIgnore]`. Unknown keys are ignored unless `UnmappedMemberHandling` is `Disallow`, missing `required` properties raise an error. Booleans and numbers follow the core schema just like the conversion methods above, so `'42'` is not an integer. Errors raise a `YamlSerializationException` with the `Path` of the node, like `$.servers[1].port`.
 
 Deserialization uses reflection, so it is annotated as not trimming and AOT compatible.

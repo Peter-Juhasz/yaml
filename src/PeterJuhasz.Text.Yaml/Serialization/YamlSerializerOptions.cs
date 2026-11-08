@@ -16,6 +16,9 @@ public sealed class YamlSerializerOptions
 	// enum members are matched by name case insensitively, and also by the name converted by this policy when set
 	public YamlNamingPolicy? EnumNamingPolicy { get; init; }
 
+	// keys of objects, which do not map to any member, are skipped by default
+	public YamlUnmappedMemberHandling UnmappedMemberHandling { get; init; }
+
 	// the options are immutable, so the converters built from them can be cached
 	private readonly ConcurrentDictionary<Type, YamlConverter> converters = new();
 

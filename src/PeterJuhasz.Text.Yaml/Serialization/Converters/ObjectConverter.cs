@@ -8,7 +8,7 @@ using PeterJuhasz.Text.Yaml.Model;
 namespace PeterJuhasz.Text.Yaml.Serialization.Converters;
 
 // creates the instance using the parameterless constructor, or by passing the matching keys to the parameters of the selected constructor,
-// then populates the remaining public settable properties, unknown keys are skipped
+// then populates the remaining public settable properties, unknown keys are skipped or rejected depending on the options
 [RequiresUnreferencedCode(YamlSerializer.UnreferencedCodeMessage)]
 [RequiresDynamicCode(YamlSerializer.DynamicCodeMessage)]
 internal sealed class ObjectConverter : YamlConverter
@@ -129,15 +129,21 @@ internal sealed class ObjectConverter : YamlConverter
 		var instance = constructor is null ? Activator.CreateInstance(Type)! : Construct(mapping, constructor, options);
 
 		var seen = required.IsEmpty ? null : new bool[properties.Count];
+		var disallowUnmapped = options.UnmappedMemberHandling is YamlUnmappedMemberHandling.Disallow;
 		foreach (var entry in mapping.Entries)
 		{
-			if (entry.Key is not ScalarNode key || !properties.TryGetValue(key.Value, out var property))
+			if (entry.Key is ScalarNode key && properties.TryGetValue(key.Value, out var property))
 			{
+				property.Property.SetValue(instance, ReadMember(entry.Value, property.Property.PropertyType, key.Value, options));
+				seen?[property.Index] = true;
 				continue;
 			}
 
-			property.Property.SetValue(instance, ReadMember(entry.Value, property.Property.PropertyType, key.Value, options));
-			seen?[property.Index] = true;
+			// keys of constructor parameters were already consumed
+			if (disallowUnmapped && !(entry.Key is ScalarNode parameter && parametersByName.ContainsKey(parameter.Value)))
+			{
+				throw Unmapped(entry.Key);
+			}
 		}
 
 		foreach (var property in required)
@@ -178,6 +184,19 @@ internal sealed class ObjectConverter : YamlConverter
 
 		// validation errors of the constructor are thrown as is
 		return constructor.Invoke(BindingFlags.DoNotWrapExceptions, binder: null, arguments, culture: null);
+	}
+
+	private YamlSerializationException Unmapped(Node key)
+	{
+		if (key is not ScalarNode scalar)
+		{
+			return new($"A key, which is not a scalar, does not map to any member of type '{Type}'.");
+		}
+
+		// the path points to the key itself
+		var exception = new YamlSerializationException($"The key '{scalar.Value}' does not map to any member of type '{Type}'.");
+		exception.Prepend(scalar.Value);
+		return exception;
 	}
 
 	private static object? ReadMember(Node node, Type type, string key, YamlSerializerOptions options)
