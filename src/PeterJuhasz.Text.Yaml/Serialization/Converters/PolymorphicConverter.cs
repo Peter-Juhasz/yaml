@@ -38,9 +38,14 @@ internal sealed class PolymorphicConverter(Type type, string discriminatorName, 
 				throw new InvalidOperationException($"The derived type '{attribute.DerivedType}' is listed multiple times for the polymorphic type '{type}'.");
 			}
 
-			if (!derivedTypes.TryAdd(attribute.TypeDiscriminator, CreateObject(attribute.DerivedType, options, discriminatorName)))
+			// the aliases share the converter of the main discriminator
+			var converter = CreateObject(attribute.DerivedType, options, discriminatorName);
+			foreach (var discriminator in (ReadOnlySpan<string>)[attribute.TypeDiscriminator, .. attribute.Aliases])
 			{
-				throw new InvalidOperationException($"The type discriminator '{attribute.TypeDiscriminator}' is used by multiple derived types of the polymorphic type '{type}'.");
+				if (!derivedTypes.TryAdd(discriminator, converter))
+				{
+					throw new InvalidOperationException($"The type discriminator '{discriminator}' is used multiple times for the polymorphic type '{type}'.");
+				}
 			}
 		}
 

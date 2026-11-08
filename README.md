@@ -129,6 +129,6 @@ public abstract class Animal;
   Good: true
 ```
 
-The discriminator can be anywhere in the mapping, its values are case sensitive, integers can be used as well (`[YamlDerivedType(typeof(Cat), 1)]`). `[YamlPolymorphic]` configures the key (`TypeDiscriminatorPropertyName`, `$type` by default), case insensitive matching of the values (`TypeDiscriminatorCaseInsensitive`), and whether unknown discriminators fall back to the base type (`UnknownDerivedTypeHandling`). Mappings without a discriminator are deserialized as the base type, when it is not abstract, otherwise they raise an error. The discriminator key is not treated as unmapped.
+The discriminator can be anywhere in the mapping, its values are case sensitive, integers can be used as well (`[YamlDerivedType(typeof(Cat), 1)]`). Additional discriminators of the same type can be listed as aliases (`[YamlDerivedType(typeof(Cat), "cat", "kitty")]`). `[YamlPolymorphic]` configures the key (`TypeDiscriminatorPropertyName`, `$type` by default), case insensitive matching of the values (`TypeDiscriminatorCaseInsensitive`), and whether unknown discriminators fall back to the base type (`UnknownDerivedTypeHandling`). Mappings without a discriminator are deserialized as the base type, when it is not abstract, otherwise they raise an error. The discriminator key is not treated as unmapped.
 
 Deserialization uses reflection, so it is annotated as not trimming and AOT compatible.

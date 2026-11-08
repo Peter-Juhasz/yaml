@@ -28,9 +28,9 @@ public class PolymorphismTests
 	[YamlDerivedType(typeof(Square), "square")]
 	public interface IShape;
 
-	public sealed record class Circle(double Radius) : IShape;
+	public sealed record class Circle(double Radius) : IShape, IAliasedShape;
 
-	public sealed record class Square(double Side) : IShape;
+	public sealed record class Square(double Side) : IShape, IAliasedShape;
 
 	[YamlPolymorphic(TypeDiscriminatorPropertyName = "kind", UnknownDerivedTypeHandling = YamlUnknownDerivedTypeHandling.FallBackToBaseType)]
 	[YamlDerivedType(typeof(HttpJob), 1)]
@@ -73,16 +73,28 @@ public class PolymorphismTests
 	[YamlDerivedType(typeof(Parrot), "parrot")]
 	public abstract class Pet;
 
-	public sealed class Parrot : Pet;
+	public sealed class Parrot : AliasedPet;
+
+	[YamlPolymorphic(TypeDiscriminatorPropertyName = "kind")]
+	[YamlDerivedType(typeof(Parrot), 1, 10, 11)]
+	public abstract class AliasedPet : Pet;
+
+	[YamlDerivedType(typeof(Circle), "circle", "round", "disc")]
+	[YamlDerivedType(typeof(Square), "square")]
+	public interface IAliasedShape;
+
+	[YamlDerivedType(typeof(Lizard), "lizard")]
+	[YamlDerivedType(typeof(Snake), "snake", "lizard")]
+	public interface IAliasConflict;
 
 	[YamlPolymorphic(TypeDiscriminatorCaseInsensitive = true)]
 	[YamlDerivedType(typeof(Lizard), "lizard")]
 	[YamlDerivedType(typeof(Snake), "LIZARD")]
 	public abstract class Reptile;
 
-	public sealed class Lizard : Reptile;
+	public sealed class Lizard : Reptile, IAliasConflict;
 
-	public sealed class Snake : Reptile;
+	public sealed class Snake : Reptile, IAliasConflict;
 
 	[TestMethod]
 	public void AbstractBase()
@@ -155,7 +167,34 @@ public class PolymorphismTests
 	{
 		var exception = Assert.ThrowsExactly<InvalidOperationException>(static () => YamlSerializer.Deserialize<Reptile>("$type: lizard"));
 
-		Assert.AreEqual($"The type discriminator 'LIZARD' is used by multiple derived types of the polymorphic type '{typeof(Reptile)}'.", exception.Message);
+		Assert.AreEqual($"The type discriminator 'LIZARD' is used multiple times for the polymorphic type '{typeof(Reptile)}'.", exception.Message);
+	}
+
+	[TestMethod]
+	[DataRow("$type: circle\nRadius: 1", typeof(Circle))]
+	[DataRow("$type: round\nRadius: 1", typeof(Circle))]
+	[DataRow("$type: disc\nRadius: 1", typeof(Circle))]
+	[DataRow("$type: square\nSide: 1", typeof(Square))]
+	public void Aliases(string yaml, Type expected)
+	{
+		Assert.AreEqual(expected, YamlSerializer.Deserialize<IAliasedShape>(yaml)?.GetType());
+	}
+
+	[TestMethod]
+	[DataRow("kind: 1")]
+	[DataRow("kind: 10")]
+	[DataRow("kind: 11")]
+	public void IntegerAliases(string yaml)
+	{
+		Assert.IsInstanceOfType<Parrot>(YamlSerializer.Deserialize<AliasedPet>(yaml));
+	}
+
+	[TestMethod]
+	public void AliasConflicts()
+	{
+		var exception = Assert.ThrowsExactly<InvalidOperationException>(static () => YamlSerializer.Deserialize<IAliasConflict>("$type: lizard"));
+
+		Assert.AreEqual($"The type discriminator 'lizard' is used multiple times for the polymorphic type '{typeof(IAliasConflict)}'.", exception.Message);
 	}
 
 	[TestMethod]
