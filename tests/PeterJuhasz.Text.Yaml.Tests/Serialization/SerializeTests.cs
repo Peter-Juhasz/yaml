@@ -201,7 +201,7 @@ public class SerializeTests
 	[DataRow("|", ScalarStyle.DoubleQuoted)]
 	[DataRow("'quoted'", ScalarStyle.DoubleQuoted)]
 	[DataRow("---", ScalarStyle.DoubleQuoted)]
-	[DataRow("line\nbreak", ScalarStyle.DoubleQuoted)]
+	[DataRow("line\nbreak", ScalarStyle.Literal)]
 	[DataRow("tab\there", ScalarStyle.DoubleQuoted)]
 	public void Strings(string value, ScalarStyle style)
 	{

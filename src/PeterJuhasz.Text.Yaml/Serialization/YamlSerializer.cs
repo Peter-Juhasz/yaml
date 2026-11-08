@@ -1,7 +1,9 @@
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using PeterJuhasz.Text.Yaml.Model;
 using PeterJuhasz.Text.Yaml.Parsing;
 using PeterJuhasz.Text.Yaml.Serialization.Converters;
+using PeterJuhasz.Text.Yaml.Writing;
 
 namespace PeterJuhasz.Text.Yaml.Serialization;
 
@@ -13,6 +15,34 @@ public static class YamlSerializer
 
 	[RequiresUnreferencedCode(UnreferencedCodeMessage)]
 	[RequiresDynamicCode(DynamicCodeMessage)]
+	public static string Serialize<T>(T value, YamlSerializerOptions? options = null) => Serialize(value, typeof(T), options);
+
+	// the writes are buffered, and the text is formatted by the formatting options of the serializer options
+	[RequiresUnreferencedCode(UnreferencedCodeMessage)]
+	[RequiresDynamicCode(DynamicCodeMessage)]
+	public static string Serialize(object? value, Type type, YamlSerializerOptions? options = null)
+	{
+		options ??= YamlSerializerOptions.Default;
+		using var lease = ArrayBufferWriterPool<char>.GetPooledObject(out var buffer);
+		Serialize(YamlWriter.Create(buffer, options.FormattingOptions), value, type, options);
+		return buffer.WrittenSpan.ToString();
+	}
+
+	[RequiresUnreferencedCode(UnreferencedCodeMessage)]
+	[RequiresDynamicCode(DynamicCodeMessage)]
+	public static void Serialize<T, TWriter>(YamlWriter<TWriter> writer, T value, YamlSerializerOptions? options = null) where TWriter : IBufferWriter<char> => Serialize(writer, value, typeof(T), options);
+
+	// writes the value as a node at the current position of the writer, like the root of a document, or the value of a key
+	[RequiresUnreferencedCode(UnreferencedCodeMessage)]
+	[RequiresDynamicCode(DynamicCodeMessage)]
+	public static void Serialize<TWriter>(YamlWriter<TWriter> writer, object? value, Type type, YamlSerializerOptions? options = null) where TWriter : IBufferWriter<char>
+	{
+		ArgumentNullException.ThrowIfNull(writer);
+		Write(writer, value, type, options);
+	}
+
+	[RequiresUnreferencedCode(UnreferencedCodeMessage)]
+	[RequiresDynamicCode(DynamicCodeMessage)]
 	public static Node SerializeToNode<T>(T value, YamlSerializerOptions? options = null) => SerializeToNode(value, typeof(T), options);
 
 	// the type selects how the value is written, just like the type of deserialization selects how it is read
@@ -20,13 +50,22 @@ public static class YamlSerializer
 	[RequiresDynamicCode(DynamicCodeMessage)]
 	public static Node SerializeToNode(object? value, Type type, YamlSerializerOptions? options = null)
 	{
+		var builder = new NodeBuilder();
+		Write(builder, value, type, options);
+		return builder.Root;
+	}
+
+	[RequiresUnreferencedCode(UnreferencedCodeMessage)]
+	[RequiresDynamicCode(DynamicCodeMessage)]
+	private static void Write(IYamlEmitter emitter, object? value, Type type, YamlSerializerOptions? options)
+	{
 		ArgumentNullException.ThrowIfNull(type);
 		if (value is not null && !type.IsInstanceOfType(value))
 		{
 			throw new ArgumentException($"The value of type '{value.GetType()}' is not an instance of type '{type}'.", nameof(value));
 		}
 
-		return YamlConverter.WriteValue(value, type, options ?? YamlSerializerOptions.Default, depth: 0);
+		YamlConverter.WriteValue(emitter, value, type, options ?? YamlSerializerOptions.Default, depth: 0);
 	}
 
 	[RequiresUnreferencedCode(UnreferencedCodeMessage)]

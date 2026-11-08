@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Runtime.Serialization;
 using PeterJuhasz.Text.Yaml.Model;
+using PeterJuhasz.Text.Yaml.Writing;
 
 namespace PeterJuhasz.Text.Yaml.Serialization.Converters;
 
@@ -69,12 +70,13 @@ internal sealed class EnumConverter : YamlConverter
 		isSigned = Type.GetTypeCode(type) is TypeCode.SByte or TypeCode.Int16 or TypeCode.Int32 or TypeCode.Int64;
 	}
 
-	public override Node Write(object value, YamlSerializerOptions options, int depth)
+	public override void Write(IYamlEmitter emitter, object value, YamlSerializerOptions options, int depth)
 	{
 		var bits = ToUInt64(value);
 		if (namesByValue.TryGetValue(bits, out var name))
 		{
-			return ScalarConverter.Text(name);
+			emitter.WriteString(name);
+			return;
 		}
 
 		if (isFlags && bits is not 0)
@@ -94,12 +96,13 @@ internal sealed class EnumConverter : YamlConverter
 			if (remaining is 0)
 			{
 				parts.Reverse();
-				return ScalarConverter.Text(String.Join(", ", parts));
+				emitter.WriteString(String.Join(", ", parts));
+				return;
 			}
 		}
 
 		// values without a name are written as integers
-		return new ScalarNode(Value: isSigned ? unchecked((long)bits).ToString(CultureInfo.InvariantCulture) : bits.ToString(CultureInfo.InvariantCulture));
+		emitter.WriteScalar(isSigned ? unchecked((long)bits).ToString(CultureInfo.InvariantCulture) : bits.ToString(CultureInfo.InvariantCulture), ScalarStyle.Plain);
 	}
 
 	public override object? Read(Node node, YamlSerializerOptions options)

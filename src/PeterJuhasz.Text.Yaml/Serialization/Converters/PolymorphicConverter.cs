@@ -1,6 +1,7 @@
 using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using PeterJuhasz.Text.Yaml.Model;
+using PeterJuhasz.Text.Yaml.Writing;
 
 namespace PeterJuhasz.Text.Yaml.Serialization.Converters;
 
@@ -10,8 +11,6 @@ namespace PeterJuhasz.Text.Yaml.Serialization.Converters;
 [RequiresDynamicCode(YamlSerializer.DynamicCodeMessage)]
 internal sealed class PolymorphicConverter(Type type, string discriminatorName, StringComparer comparer, FrozenDictionary<string, YamlConverter> derivedTypes, FrozenDictionary<Type, (ScalarNode Discriminator, YamlConverter Converter)> writers, YamlConverter? fallback, bool fallBackOnUnknown) : YamlConverter(type)
 {
-	private readonly ScalarNode discriminatorKey = ScalarConverter.Text(discriminatorName);
-
 	// returns null, when the type has no derived types listed
 	public static PolymorphicConverter? TryCreate(Type type, YamlSerializerOptions options)
 	{
@@ -70,23 +69,34 @@ internal sealed class PolymorphicConverter(Type type, string discriminatorName, 
 	private static ScalarNode WriteDiscriminator(string discriminator) => new ScalarNode(Value: discriminator) switch
 	{
 		var plain when plain.TryGetInt64(out _) => plain,
-		_ => ScalarConverter.Text(discriminator),
+		_ => new(Value: discriminator, Style: SyntaxFacts.GetTextStyle(discriminator)),
 	};
 
-	public override Node Write(object value, YamlSerializerOptions options, int depth)
+	public override void Write(IYamlEmitter emitter, object value, YamlSerializerOptions options, int depth)
 	{
 		var runtimeType = value.GetType();
 		if (writers.TryGetValue(runtimeType, out var writer))
 		{
-			// the converters of derived types are objects, which write mappings, or unsupported ones, which throw
-			var mapping = (MappingNode)writer.Converter.Write(value, options, depth);
-			return new MappingNode(Entries: [new(Key: discriminatorKey, Value: writer.Discriminator), .. mapping.Entries]);
+			// the converters of derived types are objects, or unsupported ones, which throw
+			if (writer.Converter is not ObjectConverter converter)
+			{
+				writer.Converter.Write(emitter, value, options, depth);
+				return;
+			}
+
+			emitter.WriteStartMapping();
+			emitter.WriteString(discriminatorName);
+			emitter.WriteScalar(writer.Discriminator.Value, writer.Discriminator.Style);
+			converter.WriteMembers(emitter, value, options, depth);
+			emitter.WriteEndMapping();
+			return;
 		}
 
 		// instances of the base type are written without a discriminator, and so are unknown derived types, when they fall back to the base type
 		if (fallback is not null && (runtimeType == Type || fallBackOnUnknown))
 		{
-			return fallback.Write(value, options, depth);
+			fallback.Write(emitter, value, options, depth);
+			return;
 		}
 
 		throw new YamlSerializationException($"The type '{runtimeType}' is not a known derived type of the polymorphic type '{Type}'.");

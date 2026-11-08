@@ -5,6 +5,7 @@ using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using PeterJuhasz.Text.Yaml.Model;
+using PeterJuhasz.Text.Yaml.Writing;
 
 namespace PeterJuhasz.Text.Yaml.Serialization.Converters;
 
@@ -43,11 +44,16 @@ internal sealed class ArrayConverter(Type type) : YamlConverter(type)
 		return array;
 	}
 
-	public override Node Write(object value, YamlSerializerOptions options, int depth) => value switch
+	public override void Write(IYamlEmitter emitter, object value, YamlSerializerOptions options, int depth)
 	{
-		byte[] bytes => ScalarConverter.Text(Convert.ToBase64String(bytes)),
-		_ => WriteSequence((Array)value, elementType, options, depth),
-	};
+		if (value is byte[] bytes)
+		{
+			emitter.WriteString(Convert.ToBase64String(bytes));
+			return;
+		}
+
+		WriteSequence(emitter, (Array)value, elementType, options, depth);
+	}
 }
 
 // creates the collection and adds the items one by one, the created type may be an implementation of the declared one,
@@ -75,10 +81,10 @@ internal sealed class CollectionConverter : YamlConverter
 		isStack = type.IsGenericType && Stacks.Contains(type.GetGenericTypeDefinition());
 	}
 
-	public override Node Write(object value, YamlSerializerOptions options, int depth)
+	public override void Write(IYamlEmitter emitter, object value, YamlSerializerOptions options, int depth)
 	{
 		var items = (IEnumerable)value;
-		return WriteSequence(isStack ? items.Cast<object?>().Reverse() : items, elementType, options, depth);
+		WriteSequence(emitter, isStack ? items.Cast<object?>().Reverse() : items, elementType, options, depth);
 	}
 
 	public override object? Read(Node node, YamlSerializerOptions options)
@@ -141,15 +147,16 @@ internal sealed class DictionaryConverter : YamlConverter
 		pairs = typeof(DictionaryConverter).GetMethod(nameof(Pairs), BindingFlags.NonPublic | BindingFlags.Static)!.MakeGenericMethod(arguments).CreateDelegate<Func<object, IEnumerable<(object Key, object? Value)>>>();
 	}
 
-	public override Node Write(object value, YamlSerializerOptions options, int depth)
+	public override void Write(IYamlEmitter emitter, object value, YamlSerializerOptions options, int depth)
 	{
-		var entries = ImmutableArray.CreateBuilder<MappingEntry>();
+		emitter.WriteStartMapping();
 		foreach (var (key, item) in pairs(value))
 		{
 			var path = key.ToString() ?? "?";
-			entries.Add(new(Key: WriteMember(key, keyType, path, options, depth), Value: WriteMember(item, valueType, path, options, depth)));
+			WriteMember(emitter, key, keyType, path, options, depth);
+			WriteMember(emitter, item, valueType, path, options, depth);
 		}
-		return new MappingNode(Entries: entries.DrainToImmutable());
+		emitter.WriteEndMapping();
 	}
 
 	private static IEnumerable<(object Key, object? Value)> Pairs<TKey, TValue>(object dictionary) => ((IEnumerable<KeyValuePair<TKey, TValue>>)dictionary).Select(static p => ((object)p.Key!, (object?)p.Value));

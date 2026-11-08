@@ -1,8 +1,8 @@
 using System.Collections;
 using System.Collections.Frozen;
-using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using PeterJuhasz.Text.Yaml.Model;
+using PeterJuhasz.Text.Yaml.Writing;
 
 namespace PeterJuhasz.Text.Yaml.Serialization.Converters;
 
@@ -17,29 +17,29 @@ internal abstract class YamlConverter(Type type)
 	// nesting deeper than this is most likely a cycle in the object graph, which would overflow the stack
 	private const int MaxDepth = 64;
 
-	private static readonly ScalarNode Null = new(Value: "null");
-
 	public Type Type { get; } = type;
 
 	// the node is never a null scalar when the type is nullable, those are handled by the caller
 	public abstract object? Read(Node node, YamlSerializerOptions options);
 
 	// the value is never null, and it is an instance of the type, those are handled by the caller
-	public abstract Node Write(object value, YamlSerializerOptions options, int depth);
+	public abstract void Write(IYamlEmitter emitter, object value, YamlSerializerOptions options, int depth);
 
 	protected YamlSerializationException Mismatch(Node node) => new($"Cannot convert {Describe(node)} to type '{Type}'.");
 
-	public static Node WriteValue(object? value, Type type, YamlSerializerOptions options, int depth)
+	public static void WriteValue(IYamlEmitter emitter, object? value, Type type, YamlSerializerOptions options, int depth)
 	{
 		if (value is null)
 		{
-			return Null;
+			emitter.WriteScalar("null", ScalarStyle.Plain);
+			return;
 		}
 
 		// parts of the model are written as is, just like they are returned by deserialization
 		if (value is Node node)
 		{
-			return node;
+			emitter.WriteNode(node);
+			return;
 		}
 
 		if (depth > MaxDepth)
@@ -49,14 +49,14 @@ internal abstract class YamlConverter(Type type)
 
 		// values of object members are written as their runtime type
 		var converterType = type == typeof(object) ? value.GetType() : Nullable.GetUnderlyingType(type) ?? type;
-		return options.GetConverter(converterType).Write(value, options, depth);
+		options.GetConverter(converterType).Write(emitter, value, options, depth);
 	}
 
-	protected static Node WriteMember(object? value, Type type, string key, YamlSerializerOptions options, int depth)
+	protected static void WriteMember(IYamlEmitter emitter, object? value, Type type, string key, YamlSerializerOptions options, int depth)
 	{
 		try
 		{
-			return WriteValue(value, type, options, depth + 1);
+			WriteValue(emitter, value, type, options, depth + 1);
 		}
 		catch (YamlSerializationException exception) when (exception.Prepend(key))
 		{
@@ -64,21 +64,23 @@ internal abstract class YamlConverter(Type type)
 		}
 	}
 
-	protected static SequenceNode WriteSequence(IEnumerable items, Type elementType, YamlSerializerOptions options, int depth)
+	protected static void WriteSequence(IYamlEmitter emitter, IEnumerable items, Type elementType, YamlSerializerOptions options, int depth)
 	{
-		var nodes = ImmutableArray.CreateBuilder<Node>();
+		emitter.WriteStartSequence();
+		var index = 0;
 		foreach (var item in items)
 		{
 			try
 			{
-				nodes.Add(WriteValue(item, elementType, options, depth + 1));
+				WriteValue(emitter, item, elementType, options, depth + 1);
 			}
-			catch (YamlSerializationException exception) when (exception.Prepend(nodes.Count))
+			catch (YamlSerializationException exception) when (exception.Prepend(index))
 			{
 				throw;
 			}
+			index++;
 		}
-		return new(Items: nodes.DrainToImmutable());
+		emitter.WriteEndSequence();
 	}
 
 	public static object? ReadValue(Node node, Type type, YamlSerializerOptions options)
@@ -211,5 +213,5 @@ internal sealed class UnsupportedConverter(Type type, string reason) : YamlConve
 {
 	public override object? Read(Node node, YamlSerializerOptions options) => throw new YamlSerializationException($"Cannot deserialize type '{Type}'. {reason}");
 
-	public override Node Write(object value, YamlSerializerOptions options, int depth) => throw new YamlSerializationException($"Cannot serialize type '{Type}'. {reason}");
+	public override void Write(IYamlEmitter emitter, object value, YamlSerializerOptions options, int depth) => throw new YamlSerializationException($"Cannot serialize type '{Type}'. {reason}");
 }

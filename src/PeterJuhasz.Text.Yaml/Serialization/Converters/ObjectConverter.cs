@@ -4,6 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using PeterJuhasz.Text.Yaml.Model;
+using PeterJuhasz.Text.Yaml.Writing;
 
 namespace PeterJuhasz.Text.Yaml.Serialization.Converters;
 
@@ -180,14 +181,21 @@ internal sealed class ObjectConverter : YamlConverter
 		return instance;
 	}
 
-	public override Node Write(object value, YamlSerializerOptions options, int depth)
+	public override void Write(IYamlEmitter emitter, object value, YamlSerializerOptions options, int depth)
 	{
-		var entries = ImmutableArray.CreateBuilder<MappingEntry>(written.Length);
+		emitter.WriteStartMapping();
+		WriteMembers(emitter, value, options, depth);
+		emitter.WriteEndMapping();
+	}
+
+	// the entries of the mapping, after the type discriminator, when it is written by the polymorphic converter
+	public void WriteMembers(IYamlEmitter emitter, object value, YamlSerializerOptions options, int depth)
+	{
 		foreach (var member in written)
 		{
-			entries.Add(new(Key: ScalarConverter.Text(member.Name), Value: WriteMember(member.Property.GetValue(value), member.Property.PropertyType, member.Name, options, depth)));
+			emitter.WriteString(member.Name);
+			WriteMember(emitter, member.Property.GetValue(value), member.Property.PropertyType, member.Name, options, depth);
 		}
-		return new MappingNode(Entries: entries.MoveToImmutable());
 	}
 
 	private static int Depth(Type type)
