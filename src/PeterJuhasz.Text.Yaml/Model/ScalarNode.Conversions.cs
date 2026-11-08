@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 
 namespace PeterJuhasz.Text.Yaml.Model;
 
@@ -101,6 +102,48 @@ public sealed partial record class ScalarNode
 
 		value = 0;
 		return Style is ScalarStyle.Plain && EndsWithDigitOrPoint(Value) && Decimal.TryParse(Value, FloatStyles, CultureInfo.InvariantCulture, out value);
+	}
+
+	// the core schema types are resolved by the schema aware methods above, any other type is parsed from the value regardless of the style
+	public bool TryGet<T>([NotNullWhen(true)] out T? value) where T : IParsable<T>
+	{
+		// the type checks are constants after specialization, so the boxing casts are elided for value types
+		if (typeof(T) == typeof(bool))
+		{
+			var success = TryGetBoolean(out var result);
+			value = (T)(object)result;
+			return success;
+		}
+
+		if (typeof(T) == typeof(int))
+		{
+			var success = TryGetInt32(out var result);
+			value = (T)(object)result;
+			return success;
+		}
+
+		if (typeof(T) == typeof(long))
+		{
+			var success = TryGetInt64(out var result);
+			value = (T)(object)result;
+			return success;
+		}
+
+		if (typeof(T) == typeof(double))
+		{
+			var success = TryGetDouble(out var result);
+			value = (T)(object)result;
+			return success;
+		}
+
+		if (typeof(T) == typeof(decimal))
+		{
+			var success = TryGetDecimal(out var result);
+			value = (T)(object)result;
+			return success;
+		}
+
+		return T.TryParse(Value, CultureInfo.InvariantCulture, out value);
 	}
 
 	// the number parser accepts the infinity and not a number symbols in any case, and ignores trailing null characters, none of which ends with a digit or a point

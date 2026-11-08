@@ -191,6 +191,42 @@ public class ConversionTests
 	}
 
 	[TestMethod]
+	public void TryGetCoreSchemaTypes()
+	{
+		Assert.IsTrue(Plain("TRUE").TryGet<bool>(out var boolean));
+		Assert.IsTrue(boolean);
+		Assert.IsTrue(Plain("0x1F").TryGet<int>(out var int32));
+		Assert.AreEqual(31, int32);
+		Assert.IsTrue(Plain("0o17").TryGet<long>(out var int64));
+		Assert.AreEqual(15L, int64);
+		Assert.IsTrue(Plain(".inf").TryGet<double>(out var number));
+		Assert.AreEqual(double.PositiveInfinity, number);
+		Assert.IsTrue(Plain("1.10").TryGet<decimal>(out var money));
+		Assert.AreEqual(1.10m, money);
+	}
+
+	[TestMethod]
+	public void TryGetCoreSchemaTypesInvalid()
+	{
+		Assert.IsFalse(Plain("yes").TryGet<bool>(out _));
+		Assert.IsFalse(Plain("2147483648").TryGet<int>(out _));
+		Assert.IsFalse(Plain("Infinity").TryGet<double>(out _));
+		Assert.IsFalse(new ScalarNode(Value: "1", Style: ScalarStyle.DoubleQuoted).TryGet<int>(out _));
+	}
+
+	[TestMethod]
+	public void TryGetOtherTypes()
+	{
+		Assert.IsTrue(Plain("2024-02-29").TryGet<DateOnly>(out var date));
+		Assert.AreEqual(new DateOnly(year: 2024, month: 2, day: 29), date);
+		Assert.IsTrue(new ScalarNode(Value: "6f9619ff-8b86-d011-b42d-00c04fc964ff", Style: ScalarStyle.SingleQuoted).TryGet<Guid>(out var guid));
+		Assert.AreEqual(Guid.Parse("6f9619ff-8b86-d011-b42d-00c04fc964ff"), guid);
+		Assert.IsTrue(Plain("1.5").TryGet<float>(out var single));
+		Assert.AreEqual(1.5f, single);
+		Assert.IsFalse(Plain("abc").TryGet<Guid>(out _));
+	}
+
+	[TestMethod]
 	public void FromParsedDocument()
 	{
 		var mapping = (MappingNode)Root("enabled: true\ncount: 3\nratio: 0.25\nname: '42'");
