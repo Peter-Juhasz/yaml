@@ -105,6 +105,8 @@ Supported types:
 - `DateTime`, `DateTimeOffset` (UTC when no offset is given), `DateOnly`, `TimeOnly`, `TimeSpan` (`1.02:03:04` or ISO 8601 `P1DT2H3M4S`), `Uri`, `Guid`, `Version`, and any other `IParsable<T>`
 - enums, from integers (`2`) or member names (`Information`, case insensitive), comma separated for flags (`Read, Write`); `[EnumMember(Value = "in-progress")]` replaces the name of a member
 - `Nullable<T>`, arrays, `List<T>`, `HashSet<T>`, `Dictionary<TKey, TValue>`, their interfaces, and any collection with a parameterless constructor
+- immutable (`ImmutableArray<T>`, `ImmutableList<T>`, `ImmutableHashSet<T>`, `ImmutableSortedSet<T>`, `ImmutableQueue<T>`, `ImmutableStack<T>`, `ImmutableDictionary<TKey, TValue>`, `ImmutableSortedDictionary<TKey, TValue>` and their interfaces) and frozen (`FrozenSet<T>`, `FrozenDictionary<TKey, TValue>`) collections
+- `Queue<T>`, `Stack<T>`, concurrent collections, `ReadOnlyCollection<T>`, `ReadOnlyDictionary<TKey, TValue>`, and any collection with a constructor accepting a list or dictionary; items of stacks are pushed in order, so the last one is on the top
 - `byte[]` from a base64 encoded scalar
 - `Node` and `object` properties receive the object model as is
 

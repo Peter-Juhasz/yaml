@@ -58,6 +58,11 @@ internal abstract class YamlConverter(Type type)
 			return type.GetArrayRank() is 1 ? new ArrayConverter(type) : new UnsupportedConverter(type, "Multi-dimensional arrays are not supported.");
 		}
 
+		if (CollectionFactory.TryCreateImmutable(type) is { } immutable)
+		{
+			return immutable;
+		}
+
 		// abstract collection types are created as their default implementations
 		if (type is { IsInterface: true, IsGenericType: true })
 		{
@@ -96,6 +101,11 @@ internal abstract class YamlConverter(Type type)
 			return new CollectionConverter(type, type);
 		}
 
+		if (CollectionFactory.TryCreateFromConstructor(type) is { } constructed)
+		{
+			return constructed;
+		}
+
 		return ObjectConverter.SelectConstructor(type) switch
 		{
 			(_, { } error) => new UnsupportedConverter(type, error),
@@ -103,7 +113,7 @@ internal abstract class YamlConverter(Type type)
 		};
 	}
 
-	protected static Type? FindInterface(Type type, Type definition)
+	public static Type? FindInterface(Type type, Type definition)
 	{
 		if (type.IsGenericType && type.GetGenericTypeDefinition() == definition)
 		{

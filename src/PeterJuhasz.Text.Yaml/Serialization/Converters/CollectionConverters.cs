@@ -41,7 +41,8 @@ internal sealed class ArrayConverter(Type type) : YamlConverter(type)
 	}
 }
 
-// creates the collection and adds the items one by one, the created type may be an implementation of the declared one
+// creates the collection and adds the items one by one, the created type may be an implementation of the declared one,
+// or a builder, which is converted to the declared type at the end
 [RequiresUnreferencedCode(YamlSerializer.UnreferencedCodeMessage)]
 [RequiresDynamicCode(YamlSerializer.DynamicCodeMessage)]
 internal sealed class CollectionConverter : YamlConverter
@@ -49,9 +50,11 @@ internal sealed class CollectionConverter : YamlConverter
 	private readonly Type implementationType;
 	private readonly Type elementType;
 	private readonly MethodInfo add;
+	private readonly Func<object, object>? convert;
 
-	public CollectionConverter(Type type, Type implementationType) : base(type)
+	public CollectionConverter(Type type, Type implementationType, Func<object, object>? convert = null) : base(type)
 	{
+		this.convert = convert;
 		var collection = FindInterface(implementationType, typeof(ICollection<>))!;
 		this.implementationType = implementationType;
 		elementType = collection.GetGenericArguments()[0];
@@ -73,7 +76,7 @@ internal sealed class CollectionConverter : YamlConverter
 				var item = ReadValue(sequence.Items[i], elementType, options);
 
 				// the non-generic interface is faster than reflection, and is implemented by most lists
-				if (collection is IList list)
+				if (collection is IList { IsReadOnly: false, IsFixedSize: false } list)
 				{
 					list.Add(item);
 				}
@@ -87,7 +90,7 @@ internal sealed class CollectionConverter : YamlConverter
 				throw;
 			}
 		}
-		return collection;
+		return convert is null ? collection : convert(collection);
 	}
 }
 
@@ -99,9 +102,11 @@ internal sealed class DictionaryConverter : YamlConverter
 	private readonly Type keyType;
 	private readonly Type valueType;
 	private readonly MethodInfo setItem;
+	private readonly Func<object, object>? convert;
 
-	public DictionaryConverter(Type type, Type implementationType) : base(type)
+	public DictionaryConverter(Type type, Type implementationType, Func<object, object>? convert = null) : base(type)
 	{
+		this.convert = convert;
 		var dictionary = FindInterface(implementationType, typeof(IDictionary<,>))!;
 		this.implementationType = implementationType;
 		var arguments = dictionary.GetGenericArguments();
@@ -140,6 +145,6 @@ internal sealed class DictionaryConverter : YamlConverter
 				throw;
 			}
 		}
-		return dictionary;
+		return convert is null ? dictionary : convert(dictionary);
 	}
 }
