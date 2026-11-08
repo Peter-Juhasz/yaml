@@ -22,11 +22,18 @@ internal sealed class ObjectConverter : YamlConverter
 	private readonly FrozenDictionary<string, ParameterMetadata> parametersByName;
 	private readonly FrozenDictionary<string, PropertyMetadata> properties;
 	private readonly ImmutableArray<PropertyMetadata> required;
+	private readonly string? ignoredKey;
+	private readonly StringComparer comparer;
 
-	public ObjectConverter(Type type, ConstructorInfo? constructor, YamlSerializerOptions options) : base(type)
+	// the ignored key is the type discriminator, when the type is deserialized as a derived type of a polymorphic one
+	public ObjectConverter(Type type, ConstructorInfo? constructor, YamlSerializerOptions options, string? ignoredKey = null) : base(type)
 	{
 		var comparer = options.PropertyNameCaseInsensitive ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 		var names = new Dictionary<string, string>(comparer);
+		if (ignoredKey is not null)
+		{
+			names.Add(ignoredKey, "type discriminator");
+		}
 
 		// the members are returned from the most derived type first, so hidden properties of base types are skipped
 		var publicProperties = new Dictionary<string, PropertyInfo>(StringComparer.Ordinal);
@@ -83,6 +90,8 @@ internal sealed class ObjectConverter : YamlConverter
 		}
 
 		this.constructor = constructor;
+		this.ignoredKey = ignoredKey;
+		this.comparer = comparer;
 		this.parameters = parameters.ToImmutable();
 		parametersByName = this.parameters.ToFrozenDictionary(static p => p.Name, comparer);
 		this.properties = properties.ToFrozenDictionary(comparer);
@@ -139,8 +148,8 @@ internal sealed class ObjectConverter : YamlConverter
 				continue;
 			}
 
-			// keys of constructor parameters were already consumed
-			if (disallowUnmapped && !(entry.Key is ScalarNode parameter && parametersByName.ContainsKey(parameter.Value)))
+			// keys of constructor parameters were already consumed, and the type discriminator by the polymorphic converter
+			if (disallowUnmapped && !(entry.Key is ScalarNode known && (parametersByName.ContainsKey(known.Value) || (ignoredKey is not null && comparer.Equals(known.Value, ignoredKey)))))
 			{
 				throw Unmapped(entry.Key);
 			}

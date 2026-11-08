@@ -41,7 +41,10 @@ internal abstract class YamlConverter(Type type)
 		return options.GetConverter(underlying ?? type).Read(node, options);
 	}
 
-	public static YamlConverter Create(Type type, YamlSerializerOptions options)
+	public static YamlConverter Create(Type type, YamlSerializerOptions options) => PolymorphicConverter.TryCreate(type, options) ?? CreateCore(type, options, ignoredKey: null);
+
+	// creates the converter without considering polymorphism, the ignored key is skipped by objects
+	public static YamlConverter CreateCore(Type type, YamlSerializerOptions options, string? ignoredKey)
 	{
 		if (ScalarConverter.TryCreate(type) is { } scalar)
 		{
@@ -109,7 +112,7 @@ internal abstract class YamlConverter(Type type)
 		return ObjectConverter.SelectConstructor(type) switch
 		{
 			(_, { } error) => new UnsupportedConverter(type, error),
-			(var constructor, _) => new ObjectConverter(type, constructor, options),
+			(var constructor, _) => new ObjectConverter(type, constructor, options, ignoredKey),
 		};
 	}
 
@@ -131,7 +134,7 @@ internal abstract class YamlConverter(Type type)
 		return null;
 	}
 
-	private static string Describe(Node node) => node switch
+	protected static string Describe(Node node) => node switch
 	{
 		ScalarNode scalar => $"the scalar '{scalar.Value}'",
 		SequenceNode => "a sequence",

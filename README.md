@@ -112,4 +112,23 @@ Supported types:
 
 Properties can be renamed with `[YamlPropertyName("key")]` and skipped with `[YamlIgnore]`. Unknown keys are ignored unless `UnmappedMemberHandling` is `Disallow`, missing `required` properties raise an error. Booleans and numbers follow the core schema just like the conversion methods above, so `'42'` is not an integer. Errors raise a `YamlSerializationException` with the `Path` of the node, like `$.servers[1].port`.
 
+### Polymorphism
+
+Abstract types, interfaces and base classes can be deserialized as one of their derived types, selected by a type discriminator key of the mapping:
+
+```cs
+[YamlDerivedType(typeof(Cat), "cat")]
+[YamlDerivedType(typeof(Dog), "dog")]
+public abstract class Animal;
+```
+
+```yaml
+- $type: cat
+  Lives: 9
+- $type: dog
+  Good: true
+```
+
+The discriminator can be anywhere in the mapping, its values are case sensitive, integers can be used as well (`[YamlDerivedType(typeof(Cat), 1)]`). `[YamlPolymorphic]` configures the key (`TypeDiscriminatorPropertyName`, `$type` by default) and whether unknown discriminators fall back to the base type (`UnknownDerivedTypeHandling`). Mappings without a discriminator are deserialized as the base type, when it is not abstract, otherwise they raise an error. The discriminator key is not treated as unmapped.
+
 Deserialization uses reflection, so it is annotated as not trimming and AOT compatible.
