@@ -72,10 +72,20 @@ Only plain scalars are converted: quoted and block scalars like `'42'` are alway
 
 ## Serialization
 
-To deserialize a document into a mutable .NET object, which has a public parameterless constructor and settable properties:
+To deserialize a document into a .NET object:
 
 ```cs
 var configuration = YamlSerializer.Deserialize<Configuration>(yaml);
+```
+
+Objects are created by:
+- the public parameterless constructor, then their settable properties are populated
+- otherwise the single public constructor, like the primary constructor of records, or the one marked with `[YamlConstructor]`
+
+Constructor parameters use the key of the property with the same name, so naming policies and `[YamlPropertyName]` apply to them, and the remaining settable properties are populated afterwards. Missing parameters get their default value, or `null` when they are nullable, otherwise they raise an error.
+
+```cs
+public sealed record class Server(string Host, int Port = 80);
 ```
 
 An already parsed `DocumentNode` or any `Node` can be deserialized as well. Options:

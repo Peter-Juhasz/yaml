@@ -84,22 +84,23 @@ internal abstract class YamlConverter(Type type)
 			return new UnsupportedConverter(type, "Interfaces and abstract types are not supported.");
 		}
 
-		if (!type.IsValueType && type.GetConstructor(Type.EmptyTypes) is null)
-		{
-			return new UnsupportedConverter(type, "The type must have a public parameterless constructor.");
-		}
-
-		if (FindInterface(type, typeof(IDictionary<,>)) is not null)
+		// collections are populated after they are created
+		var hasParameterlessConstructor = type.IsValueType || type.GetConstructor(Type.EmptyTypes) is not null;
+		if (hasParameterlessConstructor && FindInterface(type, typeof(IDictionary<,>)) is not null)
 		{
 			return new DictionaryConverter(type, type);
 		}
 
-		if (FindInterface(type, typeof(ICollection<>)) is not null)
+		if (hasParameterlessConstructor && FindInterface(type, typeof(ICollection<>)) is not null)
 		{
 			return new CollectionConverter(type, type);
 		}
 
-		return new ObjectConverter(type, options);
+		return ObjectConverter.SelectConstructor(type) switch
+		{
+			(_, { } error) => new UnsupportedConverter(type, error),
+			(var constructor, _) => new ObjectConverter(type, constructor, options),
+		};
 	}
 
 	protected static Type? FindInterface(Type type, Type definition)

@@ -101,9 +101,20 @@ public class ObjectTests
 		public MappingNode? Mapping { get; set; }
 	}
 
-	public sealed class Constructor(string name)
+	public sealed class AmbiguousConstructors
 	{
-		public string Name { get; set; } = name;
+		public AmbiguousConstructors(string name) => Name = name;
+
+		public AmbiguousConstructors(int id) => Name = id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+		public string Name { get; }
+	}
+
+	public sealed class NoPublicConstructor
+	{
+		private NoPublicConstructor() { }
+
+		public string? Name { get; set; }
 	}
 
 	public class Base
@@ -342,8 +353,10 @@ public class ObjectTests
 	[TestMethod]
 	public void UnsupportedTypes()
 	{
-		var exception = Assert.ThrowsExactly<YamlSerializationException>(static () => YamlSerializer.Deserialize<Constructor>("Name: x"));
-		Assert.Contains("parameterless constructor", exception.Reason);
+		var ambiguous = Assert.ThrowsExactly<YamlSerializationException>(static () => YamlSerializer.Deserialize<AmbiguousConstructors>("Name: x"));
+		Assert.Contains("multiple public constructors", ambiguous.Reason);
+		var hidden = Assert.ThrowsExactly<YamlSerializationException>(static () => YamlSerializer.Deserialize<NoPublicConstructor>("Name: x"));
+		Assert.Contains("public constructor", hidden.Reason);
 		Assert.ThrowsExactly<YamlSerializationException>(static () => YamlSerializer.Deserialize<IDisposable>("a: 1"));
 		Assert.ThrowsExactly<YamlSerializationException>(static () => YamlSerializer.Deserialize<int[,]>("[[1]]"));
 	}
