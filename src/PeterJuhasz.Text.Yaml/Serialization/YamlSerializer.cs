@@ -5,11 +5,29 @@ using PeterJuhasz.Text.Yaml.Serialization.Converters;
 
 namespace PeterJuhasz.Text.Yaml.Serialization;
 
-// deserializes the object model into mutable .NET objects, which have a public parameterless constructor and settable properties
+// deserializes the object model into .NET objects, and serializes .NET objects into the object model
 public static class YamlSerializer
 {
-	internal const string UnreferencedCodeMessage = "Deserialization reads the members of the target type using reflection, which may be removed by trimming.";
-	internal const string DynamicCodeMessage = "Deserialization may construct generic collection types and methods at runtime.";
+	internal const string UnreferencedCodeMessage = "Serialization accesses the members of the types using reflection, which may be removed by trimming.";
+	internal const string DynamicCodeMessage = "Serialization may construct generic collection types and methods at runtime.";
+
+	[RequiresUnreferencedCode(UnreferencedCodeMessage)]
+	[RequiresDynamicCode(DynamicCodeMessage)]
+	public static Node SerializeToNode<T>(T value, YamlSerializerOptions? options = null) => SerializeToNode(value, typeof(T), options);
+
+	// the type selects how the value is written, just like the type of deserialization selects how it is read
+	[RequiresUnreferencedCode(UnreferencedCodeMessage)]
+	[RequiresDynamicCode(DynamicCodeMessage)]
+	public static Node SerializeToNode(object? value, Type type, YamlSerializerOptions? options = null)
+	{
+		ArgumentNullException.ThrowIfNull(type);
+		if (value is not null && !type.IsInstanceOfType(value))
+		{
+			throw new ArgumentException($"The value of type '{value.GetType()}' is not an instance of type '{type}'.", nameof(value));
+		}
+
+		return YamlConverter.WriteValue(value, type, options ?? YamlSerializerOptions.Default, depth: 0);
+	}
 
 	[RequiresUnreferencedCode(UnreferencedCodeMessage)]
 	[RequiresDynamicCode(DynamicCodeMessage)]

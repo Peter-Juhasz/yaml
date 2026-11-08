@@ -4,11 +4,14 @@ using PeterJuhasz.Text.Yaml.Model;
 
 namespace PeterJuhasz.Text.Yaml.Serialization.Converters;
 
-// selects the derived type by the value of the type discriminator key of the mapping, then deserializes the whole mapping as that type
+// selects the derived type by the value of the type discriminator key of the mapping, then deserializes the whole mapping as that type,
+// and writes the main discriminator of the runtime type as the first key of the mapping
 [RequiresUnreferencedCode(YamlSerializer.UnreferencedCodeMessage)]
 [RequiresDynamicCode(YamlSerializer.DynamicCodeMessage)]
-internal sealed class PolymorphicConverter(Type type, string discriminatorName, StringComparer comparer, FrozenDictionary<string, YamlConverter> derivedTypes, YamlConverter? fallback, bool fallBackOnUnknown) : YamlConverter(type)
+internal sealed class PolymorphicConverter(Type type, string discriminatorName, StringComparer comparer, FrozenDictionary<string, YamlConverter> derivedTypes, FrozenDictionary<Type, (ScalarNode Discriminator, YamlConverter Converter)> writers, YamlConverter? fallback, bool fallBackOnUnknown) : YamlConverter(type)
 {
+	private readonly ScalarNode discriminatorKey = ScalarConverter.Text(discriminatorName);
+
 	// returns null, when the type has no derived types listed
 	public static PolymorphicConverter? TryCreate(Type type, YamlSerializerOptions options)
 	{
@@ -25,6 +28,7 @@ internal sealed class PolymorphicConverter(Type type, string discriminatorName, 
 		// discriminators differing only in case conflict, when they are matched case insensitively
 		var valueComparer = polymorphic.TypeDiscriminatorCaseInsensitive ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 		var derivedTypes = new Dictionary<string, YamlConverter>(valueComparer);
+		var writers = new Dictionary<Type, (ScalarNode Discriminator, YamlConverter Converter)>();
 		var seen = new HashSet<Type>();
 		foreach (var attribute in derivedAttributes)
 		{
@@ -40,6 +44,7 @@ internal sealed class PolymorphicConverter(Type type, string discriminatorName, 
 
 			// the aliases share the converter of the main discriminator
 			var converter = CreateObject(attribute.DerivedType, options, discriminatorName);
+			writers.Add(attribute.DerivedType, (WriteDiscriminator(attribute.TypeDiscriminator), converter));
 			foreach (var discriminator in (ReadOnlySpan<string>)[attribute.TypeDiscriminator, .. attribute.Aliases])
 			{
 				if (!derivedTypes.TryAdd(discriminator, converter))
@@ -58,7 +63,33 @@ internal sealed class PolymorphicConverter(Type type, string discriminatorName, 
 		}
 
 		var comparer = options.PropertyNameCaseInsensitive ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-		return new(type, discriminatorName, comparer, derivedTypes.ToFrozenDictionary(valueComparer), fallback, fallBackOnUnknown);
+		return new(type, discriminatorName, comparer, derivedTypes.ToFrozenDictionary(valueComparer), writers.ToFrozenDictionary(), fallback, fallBackOnUnknown);
+	}
+
+	// integer discriminators are written as plain integers, the others as text
+	private static ScalarNode WriteDiscriminator(string discriminator) => new ScalarNode(Value: discriminator) switch
+	{
+		var plain when plain.TryGetInt64(out _) => plain,
+		_ => ScalarConverter.Text(discriminator),
+	};
+
+	public override Node Write(object value, YamlSerializerOptions options, int depth)
+	{
+		var runtimeType = value.GetType();
+		if (writers.TryGetValue(runtimeType, out var writer))
+		{
+			// the converters of derived types are objects, which write mappings, or unsupported ones, which throw
+			var mapping = (MappingNode)writer.Converter.Write(value, options, depth);
+			return new MappingNode(Entries: [new(Key: discriminatorKey, Value: writer.Discriminator), .. mapping.Entries]);
+		}
+
+		// instances of the base type are written without a discriminator, and so are unknown derived types, when they fall back to the base type
+		if (fallback is not null && (runtimeType == Type || fallBackOnUnknown))
+		{
+			return fallback.Write(value, options, depth);
+		}
+
+		throw new YamlSerializationException($"The type '{runtimeType}' is not a known derived type of the polymorphic type '{Type}'.");
 	}
 
 	private static YamlConverter CreateObject(Type type, YamlSerializerOptions options, string discriminatorName) => CreateCore(type, options, discriminatorName) switch

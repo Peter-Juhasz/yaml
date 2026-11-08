@@ -1,4 +1,4 @@
-﻿using System.Collections.Frozen;
+using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
@@ -9,6 +9,8 @@ using PeterJuhasz.Text.Yaml.Model;
 namespace PeterJuhasz.Text.Yaml.Serialization.Converters;
 
 internal delegate bool ScalarParser(ScalarNode scalar, out object? value);
+
+internal delegate ScalarNode ScalarFormatter(object value);
 
 [RequiresUnreferencedCode(YamlSerializer.UnreferencedCodeMessage)]
 [RequiresDynamicCode(YamlSerializer.DynamicCodeMessage)]
@@ -47,6 +49,41 @@ internal sealed class ScalarConverter(Type type, ScalarParser parser) : YamlConv
 		[typeof(Version)] = static (ScalarNode scalar, out object? value) => Version.TryParse(scalar.Value, out var result) ? Return(result, out value) : Fail(out value),
 	}.ToFrozenDictionary();
 
+	// the values are written in the formats accepted by the parsers above, using the invariant culture
+	private static readonly FrozenDictionary<Type, ScalarFormatter> Formatters = new Dictionary<Type, ScalarFormatter>
+	{
+		[typeof(string)] = static value => Text((string)value),
+		[typeof(char)] = static value => Text(((char)value).ToString()),
+		[typeof(bool)] = static value => new(Value: (bool)value ? "true" : "false"),
+		[typeof(byte)] = Number,
+		[typeof(sbyte)] = Number,
+		[typeof(short)] = Number,
+		[typeof(ushort)] = Number,
+		[typeof(int)] = Number,
+		[typeof(uint)] = Number,
+		[typeof(long)] = Number,
+		[typeof(ulong)] = Number,
+		[typeof(nint)] = Number,
+		[typeof(nuint)] = Number,
+		[typeof(Int128)] = Number,
+		[typeof(UInt128)] = Number,
+		[typeof(BigInteger)] = Number,
+		[typeof(Half)] = Float<Half>,
+		[typeof(float)] = Float<float>,
+		[typeof(double)] = Float<double>,
+		[typeof(decimal)] = Number,
+		[typeof(DateTime)] = static value => Text(((DateTime)value).ToString("O", CultureInfo.InvariantCulture)),
+		[typeof(DateTimeOffset)] = static value => Text(((DateTimeOffset)value).ToString("O", CultureInfo.InvariantCulture)),
+		[typeof(DateOnly)] = static value => Text(((DateOnly)value).ToString("O", CultureInfo.InvariantCulture)),
+		[typeof(TimeOnly)] = static value => Text(((TimeOnly)value).ToString("O", CultureInfo.InvariantCulture)),
+		[typeof(TimeSpan)] = static value => Text(((TimeSpan)value).ToString("c", CultureInfo.InvariantCulture)),
+		[typeof(Uri)] = static value => Text(((Uri)value).OriginalString),
+		[typeof(Guid)] = static value => Text(((Guid)value).ToString("D", CultureInfo.InvariantCulture)),
+		[typeof(Version)] = static value => Text(((Version)value).ToString()),
+	}.ToFrozenDictionary();
+
+	private readonly ScalarFormatter formatter = Formatters.GetValueOrDefault(type, Formattable);
+
 	public static ScalarConverter? TryCreate(Type type)
 	{
 		if (Parsers.TryGetValue(type, out var parser))
@@ -65,6 +102,75 @@ internal sealed class ScalarConverter(Type type, ScalarParser parser) : YamlConv
 	}
 
 	public override object? Read(Node node, YamlSerializerOptions options) => node is ScalarNode scalar && parser(scalar, out var value) ? value : throw Mismatch(node);
+
+	public override Node Write(object value, YamlSerializerOptions options, int depth) => formatter(value);
+
+	// text is written as a plain scalar, unless it would be read as another type by the core schema, or it cannot be written as a plain scalar in block context
+	public static ScalarNode Text(string value) => RequiresQuotes(value) ? new(Value: value, Style: ScalarStyle.DoubleQuoted) : new(Value: value);
+
+	private static bool RequiresQuotes(string value)
+	{
+		if (value is [] or [' ' or '\t', ..] or [.., ' ' or '\t' or ':'])
+		{
+			return true;
+		}
+
+		// indicators cannot start a plain scalar, except for '-', '?' and ':' followed by a non-space character
+		if (value is ['-' or '?' or ':'] or ['-' or '?' or ':', ' ' or '\t', ..] or ['#' or ',' or '[' or ']' or '{' or '}' or '&' or '*' or '!' or '|' or '>' or '\'' or '"' or '%' or '@' or '`', ..])
+		{
+			return true;
+		}
+
+		// document markers are recognized at the start of a line
+		if (value.StartsWith("---", StringComparison.Ordinal) || value.StartsWith("...", StringComparison.Ordinal))
+		{
+			return true;
+		}
+
+		if (value.Contains(": ", StringComparison.Ordinal) || value.Contains(":\t", StringComparison.Ordinal) || value.Contains(" #", StringComparison.Ordinal) || value.Contains("\t#", StringComparison.Ordinal))
+		{
+			return true;
+		}
+
+		// line breaks and other non-printable characters can only be written with escape sequences
+		for (var i = 0; i < value.Length; i++)
+		{
+			switch (value[i])
+			{
+				case < ' ' or '\u007F' or '\u0085' or '\u2028' or '\u2029' or '\uFEFF':
+					return true;
+
+				// lone surrogates are not valid characters
+				case var c when Char.IsHighSurrogate(c):
+					if (i + 1 >= value.Length || !Char.IsLowSurrogate(value[i + 1]))
+					{
+						return true;
+					}
+					i++;
+					break;
+
+				case var c when Char.IsLowSurrogate(c):
+					return true;
+			}
+		}
+
+		var plain = new ScalarNode(Value: value);
+		return plain.IsNull || plain.TryGetBoolean(out _) || plain.TryGetDouble(out _);
+	}
+
+	private static ScalarNode Number(object value) => new(Value: ((IFormattable)value).ToString(format: null, CultureInfo.InvariantCulture));
+
+	// the shortest text, which round trips, is written for finite values, and the core schema symbols for the rest
+	private static ScalarNode Float<T>(object value) where T : IFloatingPointIeee754<T> => (T)value switch
+	{
+		var number when T.IsNaN(number) => new(Value: ".nan"),
+		var number when T.IsPositiveInfinity(number) => new(Value: ".inf"),
+		var number when T.IsNegativeInfinity(number) => new(Value: "-.inf"),
+		var number => new(Value: number.ToString(format: null, CultureInfo.InvariantCulture)),
+	};
+
+	// any other parsable type is written by its invariant text
+	private static ScalarNode Formattable(object value) => Text(value is IFormattable formattable ? formattable.ToString(format: null, CultureInfo.InvariantCulture) : value.ToString() ?? String.Empty);
 
 	private static bool Integer<T>(ScalarNode scalar, out object? value) where T : IBinaryInteger<T>
 	{

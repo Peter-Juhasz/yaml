@@ -1,4 +1,6 @@
+using System.Collections;
 using System.Collections.Frozen;
+using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using PeterJuhasz.Text.Yaml.Model;
 
@@ -12,12 +14,72 @@ internal abstract class YamlConverter(Type type)
 	private static readonly FrozenSet<Type> SetInterfaces = [typeof(ISet<>), typeof(IReadOnlySet<>)];
 	private static readonly FrozenSet<Type> DictionaryInterfaces = [typeof(IDictionary<,>), typeof(IReadOnlyDictionary<,>)];
 
+	// nesting deeper than this is most likely a cycle in the object graph, which would overflow the stack
+	private const int MaxDepth = 64;
+
+	private static readonly ScalarNode Null = new(Value: "null");
+
 	public Type Type { get; } = type;
 
 	// the node is never a null scalar when the type is nullable, those are handled by the caller
 	public abstract object? Read(Node node, YamlSerializerOptions options);
 
+	// the value is never null, and it is an instance of the type, those are handled by the caller
+	public abstract Node Write(object value, YamlSerializerOptions options, int depth);
+
 	protected YamlSerializationException Mismatch(Node node) => new($"Cannot convert {Describe(node)} to type '{Type}'.");
+
+	public static Node WriteValue(object? value, Type type, YamlSerializerOptions options, int depth)
+	{
+		if (value is null)
+		{
+			return Null;
+		}
+
+		// parts of the model are written as is, just like they are returned by deserialization
+		if (value is Node node)
+		{
+			return node;
+		}
+
+		if (depth > MaxDepth)
+		{
+			throw new YamlSerializationException($"The maximum depth of {MaxDepth} was exceeded, the object graph may contain a cycle.");
+		}
+
+		// values of object members are written as their runtime type
+		var converterType = type == typeof(object) ? value.GetType() : Nullable.GetUnderlyingType(type) ?? type;
+		return options.GetConverter(converterType).Write(value, options, depth);
+	}
+
+	protected static Node WriteMember(object? value, Type type, string key, YamlSerializerOptions options, int depth)
+	{
+		try
+		{
+			return WriteValue(value, type, options, depth + 1);
+		}
+		catch (YamlSerializationException exception) when (exception.Prepend(key))
+		{
+			throw;
+		}
+	}
+
+	protected static SequenceNode WriteSequence(IEnumerable items, Type elementType, YamlSerializerOptions options, int depth)
+	{
+		var nodes = ImmutableArray.CreateBuilder<Node>();
+		foreach (var item in items)
+		{
+			try
+			{
+				nodes.Add(WriteValue(item, elementType, options, depth + 1));
+			}
+			catch (YamlSerializationException exception) when (exception.Prepend(nodes.Count))
+			{
+				throw;
+			}
+		}
+		return new(Items: nodes.DrainToImmutable());
+	}
 
 	public static object? ReadValue(Node node, Type type, YamlSerializerOptions options)
 	{
@@ -148,4 +210,6 @@ internal abstract class YamlConverter(Type type)
 internal sealed class UnsupportedConverter(Type type, string reason) : YamlConverter(type)
 {
 	public override object? Read(Node node, YamlSerializerOptions options) => throw new YamlSerializationException($"Cannot deserialize type '{Type}'. {reason}");
+
+	public override Node Write(object value, YamlSerializerOptions options, int depth) => throw new YamlSerializationException($"Cannot serialize type '{Type}'. {reason}");
 }

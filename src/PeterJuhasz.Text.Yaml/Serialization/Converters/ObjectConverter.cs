@@ -17,11 +17,14 @@ internal sealed class ObjectConverter : YamlConverter
 
 	private sealed record class ParameterMetadata(int Position, string Name, Type Type, bool IsOptional, object? DefaultValue);
 
+	private sealed record class WrittenMember(string Name, PropertyInfo Property);
+
 	private readonly ConstructorInfo? constructor;
 	private readonly ImmutableArray<ParameterMetadata> parameters;
 	private readonly FrozenDictionary<string, ParameterMetadata> parametersByName;
 	private readonly FrozenDictionary<string, PropertyMetadata> properties;
 	private readonly ImmutableArray<PropertyMetadata> required;
+	private readonly ImmutableArray<WrittenMember> written;
 	private readonly string? ignoredKey;
 	private readonly StringComparer comparer;
 
@@ -48,6 +51,9 @@ internal sealed class ObjectConverter : YamlConverter
 		// parameters bind to the property of the same name, like the ones of the primary constructor of a record, so the key of the property is used for them
 		var bound = new HashSet<string>(StringComparer.Ordinal);
 		var parameters = ImmutableArray.CreateBuilder<ParameterMetadata>();
+
+		// only the members, which are read by deserialization, are written, and only when they can be read
+		var written = new List<WrittenMember>();
 		if (constructor is not null)
 		{
 			var nullability = new NullabilityInfoContext();
@@ -55,13 +61,13 @@ internal sealed class ObjectConverter : YamlConverter
 			{
 				var parameterName = parameter.Name ?? $"arg{parameter.Position}";
 				var property = publicProperties.Values.FirstOrDefault(p => String.Equals(p.Name, parameterName, StringComparison.OrdinalIgnoreCase));
-				if (property is not null)
-				{
-					bound.Add(property.Name);
-				}
-
 				var name = parameter.GetCustomAttribute<YamlPropertyNameAttribute>()?.Name ?? (property is not null ? GetName(property, options) : options.PropertyNamingPolicy?.ConvertName(parameterName) ?? parameterName);
 				AddName(names, name, parameterName, type);
+
+				if (property is not null && bound.Add(property.Name) && property is { GetMethod.IsPublic: true })
+				{
+					written.Add(new(Name: name, Property: property));
+				}
 
 				var parameterType = parameter.ParameterType.IsByRef ? parameter.ParameterType.GetElementType()! : parameter.ParameterType;
 				var (isOptional, defaultValue) = GetDefault(parameter, parameterType, nullability);
@@ -83,6 +89,11 @@ internal sealed class ObjectConverter : YamlConverter
 			var metadata = new PropertyMetadata(Index: properties.Count, Name: name, Property: property);
 			properties.Add(name, metadata);
 
+			if (property is { GetMethod.IsPublic: true })
+			{
+				written.Add(new(Name: name, Property: property));
+			}
+
 			if (property.IsDefined(typeof(RequiredMemberAttribute)))
 			{
 				required.Add(metadata);
@@ -95,6 +106,9 @@ internal sealed class ObjectConverter : YamlConverter
 		this.parameters = parameters.ToImmutable();
 		parametersByName = this.parameters.ToFrozenDictionary(static p => p.Name, comparer);
 		this.properties = properties.ToFrozenDictionary(comparer);
+
+		// members are written in the order of their declaration, starting with the ones of the base types
+		this.written = [.. written.OrderBy(static m => Depth(m.Property.DeclaringType!)).ThenBy(static m => m.Property.MetadataToken)];
 
 		// the constructor may set the required members itself
 		var setsRequiredMembers = (constructor ?? type.GetConstructor(Type.EmptyTypes))?.IsDefined(typeof(SetsRequiredMembersAttribute)) ?? false;
@@ -164,6 +178,26 @@ internal sealed class ObjectConverter : YamlConverter
 		}
 
 		return instance;
+	}
+
+	public override Node Write(object value, YamlSerializerOptions options, int depth)
+	{
+		var entries = ImmutableArray.CreateBuilder<MappingEntry>(written.Length);
+		foreach (var member in written)
+		{
+			entries.Add(new(Key: ScalarConverter.Text(member.Name), Value: WriteMember(member.Property.GetValue(value), member.Property.PropertyType, member.Name, options, depth)));
+		}
+		return new MappingNode(Entries: entries.MoveToImmutable());
+	}
+
+	private static int Depth(Type type)
+	{
+		var depth = 0;
+		for (var current = type.BaseType; current is not null; current = current.BaseType)
+		{
+			depth++;
+		}
+		return depth;
 	}
 
 	private object Construct(MappingNode mapping, ConstructorInfo constructor, YamlSerializerOptions options)

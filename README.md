@@ -131,4 +131,22 @@ public abstract class Animal;
 
 The discriminator can be anywhere in the mapping, its values are case sensitive, integers can be used as well (`[YamlDerivedType(typeof(Cat), 1)]`). Additional discriminators of the same type can be listed as aliases (`[YamlDerivedType(typeof(Cat), "cat", "kitty")]`). `[YamlPolymorphic]` configures the key (`TypeDiscriminatorPropertyName`, `$type` by default), case insensitive matching of the values (`TypeDiscriminatorCaseInsensitive`), and whether unknown discriminators fall back to the base type (`UnknownDerivedTypeHandling`). Mappings without a discriminator are deserialized as the base type, when it is not abstract, otherwise they raise an error. The discriminator key is not treated as unmapped.
 
-Deserialization uses reflection, so it is annotated as not trimming and AOT compatible.
+### Serializing to the object model
+
+The serializer mirrors deserialization, and writes .NET objects to the object model:
+
+```cs
+var node = YamlSerializer.SerializeToNode(configuration);
+```
+
+- the same options, naming policies and attributes apply, and the same types are supported
+- only the members, which are read by deserialization, are written: settable properties and the ones bound to constructor parameters, in declaration order starting with the base types
+- `null` is written as the plain scalar `null`, numbers and booleans as plain scalars by the core schema, floating point values as the shortest text which round trips (`.inf`, `-.inf`, `.nan`)
+- text is written as a plain scalar, unless it would be read as another type (`'true'`, `'42'`, `''`), or it cannot be written as a plain scalar in block context (indicators, `: `, ` #`, line breaks, leading or trailing spaces), then it is double quoted
+- enums are written by their name (`[EnumMember]` value, or the name converted by `EnumNamingPolicy`), flags are comma separated, values without a name as integers
+- `byte[]` as a base64 encoded scalar, stacks from the bottom, so they read back in the same order
+- polymorphic types write the main discriminator of their runtime type as the first key, instances of the base type are written without it, other derived types raise an error, unless they fall back to the base type
+- `Node` values are written as is, `object` members as their runtime type
+- nesting deeper than 64 levels, like reference cycles, raises an error
+
+Serialization uses reflection, so it is annotated as not trimming and AOT compatible.
