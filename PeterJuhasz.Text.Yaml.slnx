@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="Directory.Build.props" />
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="src/PeterJuhasz.Text.Yaml/PeterJuhasz.Text.Yaml.csproj" />
+  <Project Path="tests/PeterJuhasz.Text.Yaml.Tests/PeterJuhasz.Text.Yaml.Tests.csproj" />
+  <Project Path="benchmarks/PeterJuhasz.Text.Yaml.Benchmarks/PeterJuhasz.Text.Yaml.Benchmarks.csproj" />
+</Solution>

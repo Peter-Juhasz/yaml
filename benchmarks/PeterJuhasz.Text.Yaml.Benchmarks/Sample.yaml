@@ -1,0 +1,179 @@
+# a mix of the constructs found in typical configuration files
+name: Build and deploy
+
+on:
+  push:
+    branches: [main, release/*]
+    paths-ignore:
+      - docs/**
+      - "**.md"
+  pull_request:
+    types: [opened, synchronize, reopened]
+  schedule:
+    - cron: '0 3 * * 1-5'
+
+env:
+  DOTNET_VERSION: '10'
+  BUILD_CONFIGURATION: Release
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            coverage: true
+          - os: windows-latest
+            coverage: false
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}.x
+        dotnet-quality: ga
+
+    - name: Cache packages
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.NUGET_PACKAGES }}
+        key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          nuget-${{ runner.os }}-
+          nuget-
+
+    - name: Restore
+      run: dotnet restore --locked-mode
+
+    - name: Build
+      run: dotnet build --no-restore --configuration ${{ env.BUILD_CONFIGURATION }}
+
+    - name: Test
+      run: >
+        dotnet test --no-build
+        --configuration ${{ env.BUILD_CONFIGURATION }}
+        --logger "trx;LogFileName=results.trx"
+        --collect "XPlat Code Coverage"
+
+    - name: Upload results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: "test-results-${{ matrix.os }}"
+        path: '**/TestResults/**'
+        retention-days: 7
+
+  deploy:
+    needs: [build]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://example.org
+    steps:
+    - name: Deploy
+      run: |
+        set -euo pipefail
+        echo "Deploying version ${GITHUB_SHA::7}"
+        ./scripts/deploy.sh \
+          --environment production \
+          --region westeurope
+
+        echo "Done"
+
+service:
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: web
+    namespace: default
+    labels: {app: web, tier: frontend, team: "platform"}
+    annotations:
+      description: "The public web front end, served behind the load balancer.\nScaled by the horizontal pod autoscaler."
+      owner: 'platform-team@example.org'
+  spec:
+    replicas: 3
+    revisionHistoryLimit: 10
+    selector:
+      matchLabels:
+        app: web
+    template:
+      metadata:
+        labels:
+          app: web
+      spec:
+        containers:
+          - name: web
+            image: registry.example.org/web:1.42.0
+            imagePullPolicy: IfNotPresent
+            ports:
+              - containerPort: 8080
+                protocol: TCP
+              - containerPort: 9090
+                name: metrics
+            args: ["--port", "8080", "--metrics-port", "9090", "--log-level=info"]
+            env:
+              - name: ASPNETCORE_ENVIRONMENT
+                value: Production
+              - name: ConnectionStrings__Default
+                value: "Server=db;Database=web;User Id=web;Password=${DB_PASSWORD}"
+              - name: FEATURE_FLAGS
+                value: 'search,checkout,recommendations'
+            resources:
+              requests: {cpu: 250m, memory: 256Mi}
+              limits: {cpu: "1", memory: 1Gi}
+            readinessProbe:
+              httpGet:
+                path: /health/ready
+                port: 8080
+              initialDelaySeconds: 5
+              periodSeconds: 10
+            livenessProbe:
+              httpGet: {path: /health/live, port: 8080}
+              failureThreshold: 3
+
+settings:
+  logging:
+    level: info
+    format: json
+    sinks:
+      - console
+      - file
+  limits:
+    max-connections: 1000
+    timeout: 30.5
+    ratio: 0.75
+    retries: 0x10
+    enabled: true
+    optional: ~
+  description: >
+    This application serves the public web site.
+    It is deployed to three regions,
+    and scaled automatically.
+
+    See the operations handbook for details.
+  notes: |-
+    - restart the pods after rotating secrets
+    - keep at least two replicas during maintenance
+  locales: [en-US, de-DE, hu-HU, fr-FR, ja-JP]
+  quoted: 'It''s a "quoted" value with a # inside'
+  escaped: "Tab\tseparated\tvalues and a unicode é character"
+  multiline plain: this plain scalar
+    continues on the next line
+    and the one after that

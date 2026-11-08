@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<RootNamespace>PeterJuhasz.Text.Yaml</RootNamespace>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<VersionPrefix>1.0.0</VersionPrefix>
+		<PackageId>PeterJuhasz.Text.Yaml</PackageId>
+		<PackageTags>yaml</PackageTags>
+		<PackageProjectUrl>https://github.com/Peter-Juhasz/yaml</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/Peter-Juhasz/yaml</RepositoryUrl>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<IsTrimmable>true</IsTrimmable>
+		<EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+		<IsAotCompatible>true</IsAotCompatible>
+		<InvariantGlobalization>true</InvariantGlobalization>
+	</PropertyGroup>
+	<PropertyGroup Condition="$(Configuration) == 'Release'">
+		<TrimmerRemoveSymbols>true</TrimmerRemoveSymbols>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="PeterJuhasz.Extensions" Version="2.*-*" />
+	</ItemGroup>
+
+</Project>
