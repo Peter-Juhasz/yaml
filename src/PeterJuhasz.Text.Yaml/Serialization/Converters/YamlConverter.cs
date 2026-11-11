@@ -48,7 +48,7 @@ internal abstract class YamlConverter(Type type)
 		}
 
 		// values of object members are written as their runtime type
-		var converterType = type == typeof(object) ? value.GetType() : Nullable.GetUnderlyingType(type) ?? type;
+		var converterType = type == typeof(object) ? value.GetType() : type.GetNullableUnderlyingType() ?? type;
 		options.GetConverter(converterType).Write(emitter, value, options, depth);
 	}
 
@@ -96,7 +96,7 @@ internal abstract class YamlConverter(Type type)
 			return type.IsInstanceOfType(node) ? node : throw new YamlSerializationException($"Cannot convert {Describe(node)} to type '{type}'.");
 		}
 
-		var underlying = Nullable.GetUnderlyingType(type);
+		var underlying = type.GetNullableUnderlyingType();
 		if (node is ScalarNode { IsNull: true } && (underlying is not null || !type.IsValueType))
 		{
 			return null;
@@ -203,7 +203,7 @@ internal abstract class YamlConverter(Type type)
 		ScalarNode scalar => $"the scalar '{scalar.Value}'",
 		SequenceNode => "a sequence",
 		MappingNode => "a mapping",
-		_ => $"a {node.GetType().Name}",
+		DocumentNode => "a document",
 	};
 }
 

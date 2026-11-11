@@ -279,13 +279,13 @@ internal sealed class ObjectConverter : YamlConverter
 		{
 			return (true, parameter.DefaultValue switch
 			{
-				null when type.IsValueType && Nullable.GetUnderlyingType(type) is null => Activator.CreateInstance(type),
+				null when type.IsValueType && type.GetNullableUnderlyingType() is null => Activator.CreateInstance(type),
 				{ } value when type.IsEnum => Enum.ToObject(type, value),
 				var value => value,
 			});
 		}
 
-		if (Nullable.GetUnderlyingType(type) is not null)
+		if (type.GetNullableUnderlyingType() is not null)
 		{
 			return (true, null);
 		}

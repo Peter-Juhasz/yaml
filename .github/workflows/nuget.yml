@@ -2,7 +2,7 @@ name: NuGet
 
 env:
   PROJECT_NAME: 'PeterJuhasz.Text.Yaml'
-  DOTNET_VERSION: '10'
+  DOTNET_VERSION: '11.0'
   BUILD_CONFIGURATION: 'Release'
 
 on:

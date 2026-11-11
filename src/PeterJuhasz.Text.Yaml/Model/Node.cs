@@ -1,3 +1,3 @@
 namespace PeterJuhasz.Text.Yaml.Model;
 
-public abstract record class Node();
+public closed record class Node();
