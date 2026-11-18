@@ -63,7 +63,7 @@ internal sealed class ObjectConverter : YamlConverter
 				var parameterName = parameter.Name ?? $"arg{parameter.Position}";
 				var property = publicProperties.Values.FirstOrDefault(p => String.Equals(p.Name, parameterName, StringComparison.OrdinalIgnoreCase));
 				var name = parameter.GetCustomAttribute<YamlPropertyNameAttribute>()?.Name ?? (property is not null ? GetName(property, options) : options.PropertyNamingPolicy?.ConvertName(parameterName) ?? parameterName);
-				AddName(names, name, parameterName, type);
+				SerializationFacts.AddName(names, name, parameterName, type);
 
 				if (property is not null && bound.Add(property.Name) && property is { GetMethod.IsPublic: true })
 				{
@@ -86,7 +86,7 @@ internal sealed class ObjectConverter : YamlConverter
 			}
 
 			var name = GetName(property, options);
-			AddName(names, name, property.Name, type);
+			SerializationFacts.AddName(names, name, property.Name, type);
 			var metadata = new PropertyMetadata(Index: properties.Count, Name: name, Property: property);
 			properties.Add(name, metadata);
 
@@ -158,7 +158,8 @@ internal sealed class ObjectConverter : YamlConverter
 		{
 			if (entry.Key is ScalarNode key && properties.TryGetValue(key.Value, out var property))
 			{
-				property.Property.SetValue(instance, ReadMember(entry.Value, property.Property.PropertyType, key.Value, options));
+				// exceptions of setters are thrown as is, just like the ones of constructors
+				property.Property.SetValue(instance, ReadMember(entry.Value, property.Property.PropertyType, key.Value, options), BindingFlags.DoNotWrapExceptions, binder: null, index: null, culture: null);
 				seen?[property.Index] = true;
 				continue;
 			}
@@ -166,7 +167,7 @@ internal sealed class ObjectConverter : YamlConverter
 			// keys of constructor parameters were already consumed, and the type discriminator by the polymorphic converter
 			if (disallowUnmapped && !(entry.Key is ScalarNode known && (parametersByName.ContainsKey(known.Value) || (ignoredKey is not null && comparer.Equals(known.Value, ignoredKey)))))
 			{
-				throw Unmapped(entry.Key);
+				throw SerializationFacts.Unmapped(entry.Key, Type);
 			}
 		}
 
@@ -194,7 +195,7 @@ internal sealed class ObjectConverter : YamlConverter
 		foreach (var member in written)
 		{
 			emitter.WriteString(member.Name);
-			WriteMember(emitter, member.Property.GetValue(value), member.Property.PropertyType, member.Name, options, depth);
+			WriteMember(emitter, member.Property.GetValue(value, BindingFlags.DoNotWrapExceptions, binder: null, index: null, culture: null), member.Property.PropertyType, member.Name, options, depth);
 		}
 	}
 
@@ -237,18 +238,6 @@ internal sealed class ObjectConverter : YamlConverter
 		return constructor.Invoke(BindingFlags.DoNotWrapExceptions, binder: null, arguments, culture: null);
 	}
 
-	private YamlSerializationException Unmapped(Node key)
-	{
-		if (key is not ScalarNode scalar)
-		{
-			return new($"A key, which is not a scalar, does not map to any member of type '{Type}'.");
-		}
-
-		// the path points to the key itself
-		var exception = new YamlSerializationException($"The key '{scalar.Value}' does not map to any member of type '{Type}'.");
-		exception.Prepend(scalar.Value);
-		return exception;
-	}
 
 	private static object? ReadMember(Node node, Type type, string key, YamlSerializerOptions options)
 	{
@@ -264,13 +253,6 @@ internal sealed class ObjectConverter : YamlConverter
 
 	private static string GetName(PropertyInfo property, YamlSerializerOptions options) => property.GetCustomAttribute<YamlPropertyNameAttribute>()?.Name ?? options.PropertyNamingPolicy?.ConvertName(property.Name) ?? property.Name;
 
-	private static void AddName(Dictionary<string, string> names, string name, string member, Type type)
-	{
-		if (!names.TryAdd(name, member))
-		{
-			throw new InvalidOperationException($"The members '{names[name]}' and '{member}' of type '{type}' have the same name '{name}'.");
-		}
-	}
 
 	// a missing parameter is set to its default value, or to null when it is nullable, otherwise it is required
 	private static (bool IsOptional, object? DefaultValue) GetDefault(ParameterInfo parameter, Type type, NullabilityInfoContext nullability)

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<!-- generators are loaded by the compiler, which requires netstandard2.0 -->
+		<TargetFramework>netstandard2.0</TargetFramework>
+		<RootNamespace>PeterJuhasz.Text.Yaml.SourceGeneration</RootNamespace>
+		<ImplicitUsings>disable</ImplicitUsings>
+		<!-- runtime async of the other projects is not supported by netstandard2.0 -->
+		<Features></Features>
+
+		<IsPackable>false</IsPackable>
+		<IsRoslynComponent>true</IsRoslynComponent>
+		<EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- the version is pinned, the compiler loading the generator must be at least this version -->
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" PrivateAssets="all" />
+	</ItemGroup>
+
+</Project>

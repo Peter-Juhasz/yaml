@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using PeterJuhasz.Text.Yaml.Model;
 using PeterJuhasz.Text.Yaml.Parsing;
 using PeterJuhasz.Text.Yaml.Serialization.Converters;
+using PeterJuhasz.Text.Yaml.Serialization.Metadata;
 using PeterJuhasz.Text.Yaml.Writing;
 
 namespace PeterJuhasz.Text.Yaml.Serialization;
@@ -88,5 +89,87 @@ public static class YamlSerializer
 		ArgumentNullException.ThrowIfNull(type);
 
 		return YamlConverter.ReadValue(node is DocumentNode document ? document.Root : node, type, options ?? YamlSerializerOptions.Default);
+	}
+
+	// the overloads below use the metadata generated for serializer contexts, so they work without reflection, the options are the ones of the context
+
+	public static string Serialize<T>(T value, YamlTypeInfo<T> typeInfo)
+	{
+		ArgumentNullException.ThrowIfNull(typeInfo);
+		using var lease = ArrayBufferWriterPool<char>.GetPooledObject(out var buffer);
+		typeInfo.Write(YamlWriter.Create(buffer, typeInfo.Options.FormattingOptions), value, depth: 0);
+		return buffer.WrittenSpan.ToString();
+	}
+
+	public static string Serialize(object? value, Type type, YamlSerializerContext context)
+	{
+		var typeInfo = GetTypeInfo(value, type, context);
+		using var lease = ArrayBufferWriterPool<char>.GetPooledObject(out var buffer);
+		typeInfo.WriteAsObject(YamlWriter.Create(buffer, typeInfo.Options.FormattingOptions), value, depth: 0);
+		return buffer.WrittenSpan.ToString();
+	}
+
+	public static void Serialize<T, TWriter>(YamlWriter<TWriter> writer, T value, YamlTypeInfo<T> typeInfo) where TWriter : IBufferWriter<char>
+	{
+		ArgumentNullException.ThrowIfNull(writer);
+		ArgumentNullException.ThrowIfNull(typeInfo);
+		typeInfo.Write(writer, value, depth: 0);
+	}
+
+	public static void Serialize<TWriter>(YamlWriter<TWriter> writer, object? value, Type type, YamlSerializerContext context) where TWriter : IBufferWriter<char>
+	{
+		ArgumentNullException.ThrowIfNull(writer);
+		GetTypeInfo(value, type, context).WriteAsObject(writer, value, depth: 0);
+	}
+
+	public static Node SerializeToNode<T>(T value, YamlTypeInfo<T> typeInfo)
+	{
+		ArgumentNullException.ThrowIfNull(typeInfo);
+		var builder = new NodeBuilder();
+		typeInfo.Write(builder, value, depth: 0);
+		return builder.Root;
+	}
+
+	public static Node SerializeToNode(object? value, Type type, YamlSerializerContext context)
+	{
+		var typeInfo = GetTypeInfo(value, type, context);
+		var builder = new NodeBuilder();
+		typeInfo.WriteAsObject(builder, value, depth: 0);
+		return builder.Root;
+	}
+
+	public static T? Deserialize<T>(string yaml, YamlTypeInfo<T> typeInfo) => Deserialize(Parser.Parse(yaml), typeInfo);
+
+	public static T? Deserialize<T>(Node node, YamlTypeInfo<T> typeInfo)
+	{
+		ArgumentNullException.ThrowIfNull(node);
+		ArgumentNullException.ThrowIfNull(typeInfo);
+		return typeInfo.Read(node is DocumentNode document ? document.Root : node);
+	}
+
+	public static object? Deserialize(string yaml, Type type, YamlSerializerContext context) => Deserialize(Parser.Parse(yaml), type, context);
+
+	public static object? Deserialize(Node node, Type type, YamlSerializerContext context)
+	{
+		ArgumentNullException.ThrowIfNull(node);
+		ArgumentNullException.ThrowIfNull(type);
+		return GetTypeInfo(context, type).ReadAsObject(node is DocumentNode document ? document.Root : node);
+	}
+
+	private static YamlTypeInfo GetTypeInfo(object? value, Type type, YamlSerializerContext context)
+	{
+		ArgumentNullException.ThrowIfNull(type);
+		if (value is not null && !type.IsInstanceOfType(value))
+		{
+			throw new ArgumentException($"The value of type '{value.GetType()}' is not an instance of type '{type}'.", nameof(value));
+		}
+
+		return GetTypeInfo(context, type);
+	}
+
+	private static YamlTypeInfo GetTypeInfo(YamlSerializerContext context, Type type)
+	{
+		ArgumentNullException.ThrowIfNull(context);
+		return context.GetTypeInfo(type) ?? throw new InvalidOperationException($"The type '{type}' is not known by the serializer context '{context.GetType()}', list it with {nameof(YamlSerializableAttribute)}.");
 	}
 }

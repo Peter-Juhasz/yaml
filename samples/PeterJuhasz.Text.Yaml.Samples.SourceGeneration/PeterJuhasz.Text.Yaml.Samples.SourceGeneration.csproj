@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<RootNamespace>PeterJuhasz.Text.Yaml.Samples.SourceGeneration</RootNamespace>
+		<IsPackable>false</IsPackable>
+
+		<!-- the analyzers report any use of reflection based serialization, the build fails on their warnings -->
+		<EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+		<EnableAotAnalyzer>true</EnableAotAnalyzer>
+		<EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\src\PeterJuhasz.Text.Yaml\PeterJuhasz.Text.Yaml.csproj" />
+
+		<!-- the package references the generator itself, the project needs to reference it explicitly -->
+		<ProjectReference Include="..\..\src\PeterJuhasz.Text.Yaml.SourceGeneration\PeterJuhasz.Text.Yaml.SourceGeneration.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+	</ItemGroup>
+
+</Project>

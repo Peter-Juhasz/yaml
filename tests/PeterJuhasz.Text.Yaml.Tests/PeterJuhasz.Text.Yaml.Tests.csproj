@@ -16,7 +16,13 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\src\PeterJuhasz.Text.Yaml\PeterJuhasz.Text.Yaml.csproj" />
+		<ProjectReference Include="..\..\src\PeterJuhasz.Text.Yaml.SourceGeneration\PeterJuhasz.Text.Yaml.SourceGeneration.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 	</ItemGroup>
+
+	<PropertyGroup>
+		<!-- the tests list unsupported and misconfigured types on purpose, to compare the errors raised by both serializers -->
+		<NoWarn>$(NoWarn);YAML1003;YAML1005</NoWarn>
+	</PropertyGroup>
 
 	<ItemGroup>
 		<Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />

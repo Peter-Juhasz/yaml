@@ -43,7 +43,7 @@ internal sealed class PolymorphicConverter(Type type, string discriminatorName, 
 
 			// the aliases share the converter of the main discriminator
 			var converter = CreateObject(attribute.DerivedType, options, discriminatorName);
-			writers.Add(attribute.DerivedType, (WriteDiscriminator(attribute.TypeDiscriminator), converter));
+			writers.Add(attribute.DerivedType, (SerializationFacts.CreateDiscriminator(attribute.TypeDiscriminator), converter));
 			foreach (var discriminator in (ReadOnlySpan<string>)[attribute.TypeDiscriminator, .. attribute.Aliases])
 			{
 				if (!derivedTypes.TryAdd(discriminator, converter))
@@ -65,12 +65,6 @@ internal sealed class PolymorphicConverter(Type type, string discriminatorName, 
 		return new(type, discriminatorName, comparer, derivedTypes.ToFrozenDictionary(valueComparer), writers.ToFrozenDictionary(), fallback, fallBackOnUnknown);
 	}
 
-	// integer discriminators are written as plain integers, the others as text
-	private static ScalarNode WriteDiscriminator(string discriminator) => new ScalarNode(Value: discriminator) switch
-	{
-		var plain when plain.TryGetInt64(out _) => plain,
-		_ => new(Value: discriminator, Style: SyntaxFacts.GetTextStyle(discriminator)),
-	};
 
 	public override void Write(IYamlEmitter emitter, object value, YamlSerializerOptions options, int depth)
 	{
@@ -139,11 +133,5 @@ internal sealed class PolymorphicConverter(Type type, string discriminatorName, 
 		}
 	}
 
-	// the path points to the discriminator itself
-	private YamlSerializationException Discriminator(string reason)
-	{
-		var exception = new YamlSerializationException(reason);
-		exception.Prepend(discriminatorName);
-		return exception;
-	}
+	private YamlSerializationException Discriminator(string reason) => SerializationFacts.InvalidDiscriminator(discriminatorName, reason);
 }

@@ -4,6 +4,9 @@
     <File Path="README.md" />
   </Folder>
   <Project Path="src/PeterJuhasz.Text.Yaml/PeterJuhasz.Text.Yaml.csproj" />
+  <Project Path="src/PeterJuhasz.Text.Yaml.SourceGeneration/PeterJuhasz.Text.Yaml.SourceGeneration.csproj" />
   <Project Path="tests/PeterJuhasz.Text.Yaml.Tests/PeterJuhasz.Text.Yaml.Tests.csproj" />
+  <Project Path="tests/PeterJuhasz.Text.Yaml.SourceGeneration.Tests/PeterJuhasz.Text.Yaml.SourceGeneration.Tests.csproj" />
   <Project Path="benchmarks/PeterJuhasz.Text.Yaml.Benchmarks/PeterJuhasz.Text.Yaml.Benchmarks.csproj" />
+  <Project Path="samples/PeterJuhasz.Text.Yaml.Samples.SourceGeneration/PeterJuhasz.Text.Yaml.Samples.SourceGeneration.csproj" />
 </Solution>

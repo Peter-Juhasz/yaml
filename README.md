@@ -21,6 +21,15 @@ Parsing a ~200 line configuration file to an object model ([benchmarks](benchmar
 | YamlDotNet            | 102.50 us | 175.61 KB |
 | PeterJuhasz.Text.Yaml |  18.67 us |   30.2 KB |
 
+Converting between the object model and .NET objects of a ~170 line configuration, by reflection and by [source generation](#source-generation):
+
+| Method                  | Mean     | Allocated |
+|------------------------ |---------:|----------:|
+| Deserialize, reflection |  9.17 us |  12.39 KB |
+| Deserialize, generated  |  4.12 us |   11.9 KB |
+| Serialize, reflection   | 22.73 us |  17.18 KB |
+| Serialize, generated    | 20.31 us |   15.4 KB |
+
 ## High-level API
 
 To parse a YAML string to a Document Object Model:
@@ -153,7 +162,45 @@ Serializing to a writer writes the value at the current position, like the root 
 - `Node` values are written as is, `object` members as their runtime type
 - nesting deeper than 64 levels, like reference cycles, raises an error
 
-Serialization uses reflection, so it is annotated as not trimming and AOT compatible.
+Serialization uses reflection, so it is annotated as not trimming and AOT compatible, use source generation instead for trimmed and native AOT applications.
+
+### Source generation
+
+The metadata of types can be generated at compile time instead, so serialization works without reflection, with trimming and native AOT. List the root types on a partial context, the types they reference are included as well:
+
+```cs
+[YamlSerializable(typeof(Configuration))]
+internal sealed partial class AppYamlContext : YamlSerializerContext;
+```
+
+Then pass the metadata of the type, or the context with the type:
+
+```cs
+var configuration = YamlSerializer.Deserialize(yaml, AppYamlContext.Default.Configuration);
+var yaml = YamlSerializer.Serialize(configuration, AppYamlContext.Default.Configuration);
+
+var context = new AppYamlContext(new() { PropertyNamingPolicy = YamlNamingPolicy.SnakeCaseLower });
+var value = YamlSerializer.Deserialize(yaml, typeof(Configuration), context);
+```
+
+The generator ships with the package. Generated contexts behave the same as the reflection based serializer:
+- the options are applied at runtime, so naming policies, case insensitive matching and unmapped member handling work the same way, `Default` uses the default options
+- the same types, attributes, constructors, required and init only members, polymorphism, and errors (including their paths) are supported
+- non public constructors marked with `[YamlConstructor]` and init only setters are called by `UnsafeAccessor`
+- the property names are the names of the types (`Configuration`, `ListServer`, `NullableInt32`), qualified by their containing types or namespaces when they collide, or set by `TypeInfoPropertyName`
+- values of `object` members are written as their runtime type, which must be known by the context, list it with `[YamlSerializable]` when it is not referenced otherwise
+
+Not supported by source generation: init only properties, non public constructors and required members of generic types, tuples with more than seven elements, delegates, and types not accessible from the context. These are reported at compile time:
+
+| Id       | Severity | Description |
+|----------|----------|-------------|
+| YAML1001 | Error    | The context or its containing types are not partial |
+| YAML1002 | Error    | `[YamlSerializable]` is on a type, which does not derive from `YamlSerializerContext` |
+| YAML1003 | Warning  | The type is not supported by serialization, like abstract types or types with multiple constructors, it raises an error when used |
+| YAML1004 | Warning  | The type or member is not supported by source generation |
+| YAML1005 | Warning  | The configuration is invalid, like conflicting names or type discriminators, it raises an error when used |
+| YAML1006 | Error    | Multiple types have the same `TypeInfoPropertyName` |
+| YAML1007 | Error    | The context or its containing types are generic |
 
 ## Writer
 

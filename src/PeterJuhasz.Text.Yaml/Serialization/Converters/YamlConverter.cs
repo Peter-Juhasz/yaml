@@ -14,8 +14,6 @@ internal abstract class YamlConverter(Type type)
 	private static readonly FrozenSet<Type> SetInterfaces = [typeof(ISet<>), typeof(IReadOnlySet<>)];
 	private static readonly FrozenSet<Type> DictionaryInterfaces = [typeof(IDictionary<,>), typeof(IReadOnlyDictionary<,>)];
 
-	// nesting deeper than this is most likely a cycle in the object graph, which would overflow the stack
-	private const int MaxDepth = 64;
 
 	public Type Type { get; } = type;
 
@@ -25,7 +23,7 @@ internal abstract class YamlConverter(Type type)
 	// the value is never null, and it is an instance of the type, those are handled by the caller
 	public abstract void Write(IYamlEmitter emitter, object value, YamlSerializerOptions options, int depth);
 
-	protected YamlSerializationException Mismatch(Node node) => new($"Cannot convert {Describe(node)} to type '{Type}'.");
+	protected YamlSerializationException Mismatch(Node node) => SerializationFacts.Mismatch(node, Type);
 
 	public static void WriteValue(IYamlEmitter emitter, object? value, Type type, YamlSerializerOptions options, int depth)
 	{
@@ -42,9 +40,9 @@ internal abstract class YamlConverter(Type type)
 			return;
 		}
 
-		if (depth > MaxDepth)
+		if (depth > SerializationFacts.MaxDepth)
 		{
-			throw new YamlSerializationException($"The maximum depth of {MaxDepth} was exceeded, the object graph may contain a cycle.");
+			throw SerializationFacts.DepthExceeded();
 		}
 
 		// values of object members are written as their runtime type
@@ -93,7 +91,7 @@ internal abstract class YamlConverter(Type type)
 
 		if (typeof(Node).IsAssignableFrom(type))
 		{
-			return type.IsInstanceOfType(node) ? node : throw new YamlSerializationException($"Cannot convert {Describe(node)} to type '{type}'.");
+			return type.IsInstanceOfType(node) ? node : throw SerializationFacts.Mismatch(node, type);
 		}
 
 		var underlying = type.GetNullableUnderlyingType();
@@ -198,20 +196,14 @@ internal abstract class YamlConverter(Type type)
 		return null;
 	}
 
-	protected static string Describe(Node node) => node switch
-	{
-		ScalarNode scalar => $"the scalar '{scalar.Value}'",
-		SequenceNode => "a sequence",
-		MappingNode => "a mapping",
-		DocumentNode => "a document",
-	};
+	protected static string Describe(Node node) => SerializationFacts.Describe(node);
 }
 
 [RequiresUnreferencedCode(YamlSerializer.UnreferencedCodeMessage)]
 [RequiresDynamicCode(YamlSerializer.DynamicCodeMessage)]
 internal sealed class UnsupportedConverter(Type type, string reason) : YamlConverter(type)
 {
-	public override object? Read(Node node, YamlSerializerOptions options) => throw new YamlSerializationException($"Cannot deserialize type '{Type}'. {reason}");
+	public override object? Read(Node node, YamlSerializerOptions options) => throw new YamlSerializationException(SerializationFacts.UnsupportedRead(Type, reason));
 
-	public override void Write(IYamlEmitter emitter, object value, YamlSerializerOptions options, int depth) => throw new YamlSerializationException($"Cannot serialize type '{Type}'. {reason}");
+	public override void Write(IYamlEmitter emitter, object value, YamlSerializerOptions options, int depth) => throw new YamlSerializationException(SerializationFacts.UnsupportedWrite(Type, reason));
 }
